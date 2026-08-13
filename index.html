@@ -12224,6 +12224,335 @@ pintarDrawer = function(){
   }));
 };
 
+/* ---------------------------------------------------------------
+   V49  El pedido como planilla: columnas, filas y un + para agregar
+
+   Desde la V16 el requerimiento entraba SOLO por Excel. Para el que
+   necesita tres cosas, bajar la plantilla, llenarla y subirla es un
+   rodeo largo — y en obra, con el celular, a veces ni hay Excel.
+
+   Ahora el pedido se ve y se escribe como la plantilla: las mismas
+   columnas, una fila por material. El archivo sigue funcionando igual
+   —lo que carga cae en estas mismas filas— y se puede corregir lo
+   importado sin volver a subir nada.
+
+   Las columnas son las que guarda cada línea: descripción, cantidad,
+   unidad y observaciones. Obra, área, prioridad y fecha quedan arriba
+   porque son del pedido entero, no de cada material: la propia
+   importación las lee una sola vez, de la primera fila.
+   --------------------------------------------------------------- */
+(function estilosV49(){
+  if($("estilos-v49")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v49";
+  s.textContent =
+    /* la tabla se desplaza sola: en un celular no entran cuatro columnas */
+    ".tabla-req{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--borde);" +
+      "border-radius:12px;background:var(--sup)}" +
+    ".tabla-req table{border-collapse:collapse;width:100%;min-width:520px}" +
+    ".tabla-req th{font-size:11px;font-weight:600;color:var(--tinta-sec);text-align:left;" +
+      "text-transform:uppercase;letter-spacing:.03em;padding:9px 8px;background:var(--sup-var);" +
+      "border-bottom:1px solid var(--borde);white-space:nowrap}" +
+    ".tabla-req td{padding:5px 6px;border-bottom:1px solid var(--borde-suave,var(--borde))}" +
+    ".tabla-req tr:last-child td{border-bottom:0}" +
+    ".tabla-req input{width:100%;border:1px solid transparent;background:transparent;" +
+      "padding:8px 7px;border-radius:8px;font:inherit;font-size:13.5px;color:inherit}" +
+    ".tabla-req input:focus{border-color:var(--pri);background:var(--sup);outline:none}" +
+    ".tabla-req .c-desc{min-width:170px}.tabla-req .c-obs{min-width:140px}" +
+    ".tabla-req .c-cant{width:84px}.tabla-req .c-und{width:88px}" +
+    ".tabla-req .c-quita{width:40px;text-align:center}" +
+    ".tabla-req .quita-fila{border:0;background:transparent;color:var(--tinta-sec);" +
+      "font-size:17px;line-height:1;cursor:pointer;padding:7px 6px;border-radius:8px}" +
+    ".tabla-req .quita-fila:hover,.tabla-req .quita-fila:active{background:var(--mal-f,#fde8e8);color:var(--mal,#b42318)}" +
+    ".tabla-req .sin-filas td{padding:20px 10px;text-align:center;color:var(--tinta-sec);font-size:13px}" +
+    /* el + flota sobre el formulario, encima de la barra de botones */
+    "#mr-fab{position:absolute;right:18px;bottom:84px;z-index:30;width:52px;height:52px;" +
+      "border-radius:999px;border:0;background:var(--pri);color:var(--sobre-pri);" +
+      "font-size:28px;line-height:1;cursor:pointer;box-shadow:0 6px 18px rgba(16,24,40,.28);" +
+      "display:flex;align-items:center;justify-content:center;padding:0}" +
+    "#mr-fab:active{transform:scale(.94)}";
+  document.head.appendChild(s);
+})();
+
+const COLS_REQ_V49 = [
+  {k:"desc",   t:"Descripción",    c:"c-desc", tipo:"text"},
+  {k:"cant",   t:"Cantidad",       c:"c-cant", tipo:"number"},
+  {k:"unidad", t:"Unidad",         c:"c-und",  tipo:"text"},
+  {k:"obs",    t:"Observaciones",  c:"c-obs",  tipo:"text"}
+];
+
+function filaVaciaV49(){
+  return {desc:"", cant:1, unidad:"und", obs:"", foto:null};
+}
+
+function pintarTablaReqV49(){
+  const cont = $("mr-items");
+  if(!cont) return;
+
+  const cabecera = "<tr>" + COLS_REQ_V49.map(c => "<th>" + c.t + "</th>").join("") +
+                   '<th class="c-quita"></th></tr>';
+
+  const cuerpo = itemsReq.length
+    ? itemsReq.map((it, i) => "<tr>" + COLS_REQ_V49.map(c =>
+        '<td class="' + c.c + '"><input type="' + c.tipo + '"' +
+        (c.tipo === "number" ? ' min="0.01" step="0.01" inputmode="decimal"' : "") +
+        ' data-campo="' + c.k + '" data-fila="' + i + '" value="' + esc(String(it[c.k] === undefined ? "" : it[c.k])) + '"' +
+        (c.k === "desc" ? ' placeholder="Qué material necesita"' : "") + "></td>").join("") +
+        '<td class="c-quita"><button type="button" class="quita-fila" data-quitaritem="' + i +
+        '" aria-label="Quitar esta línea" title="Quitar">✕</button></td></tr>').join("")
+    : '<tr class="sin-filas"><td colspan="' + (COLS_REQ_V49.length + 1) + '">' +
+      "Toque el + para agregar un material, o suba la plantilla.</td></tr>";
+
+  cont.innerHTML = '<div class="tabla-req"><table><thead>' + cabecera +
+                   "</thead><tbody>" + cuerpo + "</tbody></table></div>";
+
+  /* Se escribe directo sobre el arreglo y NO se repinta: repintar en cada
+     tecla le sacaría el foco al campo y el teclado del celular se cerraría. */
+  $$("#mr-items input[data-campo]").forEach(inp => {
+    inp.addEventListener("input", ()=>{
+      const it = itemsReq[+inp.dataset.fila];
+      if(!it) return;
+      it[inp.dataset.campo] = inp.dataset.campo === "cant"
+        ? Math.max(0.01, num(inp.value) || 0.01)
+        : inp.value;
+    });
+  });
+
+  $$("#mr-items [data-quitaritem]").forEach(b => b.addEventListener("click", ()=>{
+    itemsReq.splice(+b.dataset.quitaritem, 1);
+    pintarItemsReq();
+  }));
+}
+
+const pintarItemsReqV49 = pintarItemsReq;
+pintarItemsReq = function(){
+  pintarItemsReqV49();      /* deja que corra el bloqueo del formulario */
+  pintarTablaReqV49();      /* y encima va la planilla */
+};
+
+/* El + flotante: agrega una línea y deja el cursor en la descripción */
+(function fabRequerimientoV49(){
+  const modal = $("modal-requerimiento");
+  if(!modal || $("mr-fab")) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "mr-fab";
+  b.setAttribute("aria-label", "Agregar un material al pedido");
+  b.title = "Agregar un material";
+  b.textContent = "+";
+  b.addEventListener("click", ()=>{
+    itemsReq.push(filaVaciaV49());
+    pintarItemsReq();
+    const campos = $$('#mr-items input[data-campo="desc"]');
+    const ultimo = campos[campos.length - 1];
+    if(ultimo){ ultimo.focus(); ultimo.scrollIntoView({block:"center", behavior:"smooth"}); }
+  });
+  modal.appendChild(b);
+  if(getComputedStyle(modal).position === "static") modal.style.position = "relative";
+})();
+
+/* Una línea sin descripción no es un material: no debe llegar al pedido. */
+const registrarRequerimientoV49 = registrarRequerimiento;
+registrarRequerimiento = function(){
+  const antes = itemsReq.length;
+  for(let i = itemsReq.length - 1; i >= 0; i--)
+    if(!String(itemsReq[i].desc || "").trim()) itemsReq.splice(i, 1);
+  if(antes !== itemsReq.length) pintarItemsReq();
+  if(!itemsReq.length) return snack("Escriba al menos un material.", "err");
+  return registrarRequerimientoV49.apply(this, arguments);
+};
+
+/* ---------------------------------------------------------------
+   V50  El formulario, ordenado
+
+   Pide lo mismo que antes —no se saca ningún dato— pero agrupado. Venía
+   así: la tarjeta de quién solicita, el buscador de materiales, y
+   después obra, área, prioridad y fecha sueltas, sin tarjeta ni título,
+   flotando entre dos bloques que sí la tenían. Cuatro campos que son del
+   pedido parecían no ser de nada.
+
+   Queda en cuatro pasos, en el orden en que se llena:
+     1. Suba su requerimiento   (la caja de la V47)
+     2. Datos del pedido        quién pide, obra, área, prioridad, fecha
+     3. Materiales              buscador y la planilla de la V49
+     4. Adjuntos                foto, guía y justificación
+
+   Se MUEVEN los nodos que ya están, no se vuelven a crear: los campos
+   conservan su id y todo lo que quedó enganchado en las versiones
+   anteriores sigue funcionando.
+   --------------------------------------------------------------- */
+(function ordenFormularioV50(){
+  const cuerpo = document.querySelector("#modal-requerimiento .cuerpo");
+  if(!cuerpo || $("estilos-v50")) return;
+
+  const s = document.createElement("style");
+  s.id = "estilos-v50";
+  s.textContent =
+    "#modal-requerimiento .sech-v50{font-size:11.5px;font-weight:700;letter-spacing:.04em;" +
+      "text-transform:uppercase;color:var(--tinta-sec);margin:18px 0 7px;display:flex;" +
+      "align-items:center;gap:7px}" +
+    "#modal-requerimiento .sech-v50 .n{width:19px;height:19px;border-radius:999px;" +
+      "background:var(--pri-cont);color:var(--pri);font-size:11px;display:flex;" +
+      "align-items:center;justify-content:center;flex:0 0 auto}" +
+    "#modal-requerimiento .caja-v50{background:var(--sup);border:1px solid var(--borde);" +
+      "border-radius:14px;padding:12px}" +
+    "#modal-requerimiento .caja-v50 > * + *{margin-top:11px}" +
+    /* la fila de quién solicita pierde su tarjeta: ya vive dentro de una */
+    "#modal-requerimiento .solicita-v50{background:var(--pri-cont);border-radius:10px;padding:10px}";
+  document.head.appendChild(s);
+
+  /* Cada paso es UN elemento con su título adentro. Así, para acomodarlos
+     en pantalla grande, basta con mover la sección: no hay que adivinar
+     qué div es cuál. */
+  const seccion = (n, titulo, nodos) => {
+    const sec = document.createElement("section");
+    sec.className = "paso-v50";
+    sec.dataset.paso = n;
+    const h = document.createElement("div");
+    h.className = "sech-v50";
+    h.innerHTML = '<span class="n">' + n + "</span>" + esc(titulo);
+    const caja = document.createElement("div");
+    caja.className = "caja-v50";
+    nodos.forEach(x => { if(x) caja.appendChild(x); });
+    sec.appendChild(h);
+    sec.appendChild(caja);
+    cuerpo.appendChild(sec);
+  };
+
+  /* Se toman las piezas ANTES de mover nada, que al mover cambian de sitio */
+  const excel     = $("mr-excel");
+  const aviso     = $("mr-aviso-bloqueo");
+  const solicita  = cuerpo.querySelector(".card.acento");
+  const catalogo  = $("mr-catalogo");
+  const items     = $("mr-items");
+  const dos       = [...cuerpo.querySelectorAll(":scope > .dos")];
+  const adjuntos  = [...cuerpo.querySelectorAll(":scope > .campo")];
+  const sechVieja = [...cuerpo.querySelectorAll(":scope > .sech")];
+
+  if(!excel || !items) return;
+
+  sechVieja.forEach(x => x.remove());
+  if(solicita){ solicita.classList.remove("card", "acento"); solicita.classList.add("solicita-v50"); }
+  if(catalogo)  catalogo.classList.remove("card");
+
+  /* 1 · la caja de subida, sola arriba y sin tarjeta alrededor */
+  cuerpo.appendChild(excel);
+  if(aviso) cuerpo.appendChild(aviso);
+
+  /* La caja de subida va suelta arriba: es el atajo, no un paso más.
+     Los pasos numerados son los tres que siempre hay que llenar. */
+  seccion(1, "Datos del pedido", [solicita].concat(dos));
+  seccion(2, "Materiales", [catalogo, items]);
+  seccion(3, "Adjuntos", adjuntos);
+})();
+
+/* ---------------------------------------------------------------
+   V51  Celular, tablet o computadora
+
+   La Administradora de Obra trabaja en computadora, no en celular. La
+   app estaba clavada en 460 px de ancho: en una laptop quedaba una tira
+   angosta en el medio con dos franjas grises a los costados.
+
+   Qué NO se hace: agrandar letras ni íconos. En pantalla grande el
+   tamaño de la letra no tiene por qué crecer —se lee igual y queda
+   ridículo—. Lo que cambia es cuánto entra a lo ancho y cómo se reparte.
+
+   CÓMO SE DETECTA. No se mira el "user agent": esa cadena miente
+   —Chrome dice ser Safari, el iPad dice ser Mac— y cada modelo nuevo que
+   sale rompe la lista. Se mira lo único que importa de verdad:
+
+     · si hay un mouse de por medio   → (any-pointer: fine)
+     · si la pantalla se toca         → maxTouchPoints / (any-pointer: coarse)
+     · cuánto mide la ventana
+
+   Con eso entran bien todos: iPhone y Android (se tocan, angostos) van
+   de celular; iPad va de tablet, y si le enchufan teclado y mouse pasa a
+   computadora, que es lo correcto; Mac, PC y laptops van de computadora;
+   y una laptop con pantalla táctil también, porque tiene mouse. Además
+   se vuelve a mirar al cambiar el tamaño de la ventana o al girar el
+   equipo, así que achicar el navegador en la laptop devuelve la vista
+   angosta sin recargar.
+   --------------------------------------------------------------- */
+(function equipoV51(){
+  if($("estilos-v51")) return;
+
+  function medir(){
+    const mq = q => window.matchMedia && window.matchMedia(q).matches;
+    const hayMouse  = mq("(any-pointer: fine)") || mq("(any-hover: hover)");
+    const seToca    = (navigator.maxTouchPoints || 0) > 0 || mq("(any-pointer: coarse)");
+    const ancho     = window.innerWidth || document.documentElement.clientWidth;
+
+    /* Manda el ancho, y el mouse desempata: una ventana angosta en la
+       laptop se trabaja como celular, que es lo que el usuario ve. */
+    let tipo;
+    if(ancho >= 980 && hayMouse) tipo = "computadora";
+    else if(ancho >= 700)        tipo = "tablet";
+    else                         tipo = "celular";
+
+    return {tipo, ancho, hayMouse, seToca};
+  }
+
+  function aplicar(){
+    const e = medir();
+    const raiz = document.documentElement;
+    ["celular","tablet","computadora"].forEach(t =>
+      raiz.classList.toggle("equipo-" + t, t === e.tipo));
+    raiz.classList.toggle("con-mouse", e.hayMouse);
+    raiz.classList.toggle("tactil", e.seToca);
+    window.ALM_EQUIPO = e;
+    return e;
+  }
+
+  const s = document.createElement("style");
+  s.id = "estilos-v51";
+  s.textContent =
+    /* ── Computadora: más ancho, MISMO tamaño de letra e íconos ── */
+    "html.equipo-computadora .app{max-width:1180px}" +
+    "html.equipo-computadora .modal .cuerpo{max-width:1040px}" +
+    "html.equipo-computadora .modal .pie-modal{max-width:1040px;margin:0 auto;width:100%}" +
+
+    /* Las tarjetas de tareas dejan de ser una columna larga */
+    "html.equipo-computadora .tareas.rejilla{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}" +
+    "html.equipo-computadora .metricas{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}" +
+
+    /* Los pares de campos se reparten de a cuatro, no de a dos */
+    "html.equipo-computadora .modal .cuerpo .dos{grid-template-columns:repeat(4,1fr)}" +
+
+    /* El requerimiento en dos columnas: los datos y los adjuntos a un
+       lado, la planilla al otro, que es la que pide espacio. */
+    "html.equipo-computadora #modal-requerimiento .cuerpo{display:grid;" +
+      "grid-template-columns:minmax(320px,7fr) minmax(380px,9fr);" +
+      "grid-column-gap:24px;align-content:start}" +
+    /* la caja de subida cruza las dos columnas */
+    "html.equipo-computadora #modal-requerimiento .cuerpo > #mr-excel," +
+    "html.equipo-computadora #modal-requerimiento .cuerpo > #mr-aviso-bloqueo{grid-column:1/-1}" +
+    /* izquierda los datos y los adjuntos, derecha la planilla */
+    'html.equipo-computadora #modal-requerimiento [data-paso="1"]{grid-column:1;grid-row:3}' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="3"]{grid-column:1;grid-row:4}' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="2"]{grid-column:2;grid-row:3/span 2}' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="2"] .sech-v50{margin-top:18px}' +
+    "html.equipo-computadora #modal-requerimiento .cuerpo .dos{grid-template-columns:repeat(2,1fr)}" +
+    "html.equipo-computadora #mr-fab{bottom:100px;right:28px}" +
+
+    /* Con mouse, el cursor tiene que decir qué se puede tocar */
+    "html.con-mouse .tarea,html.con-mouse .op,html.con-mouse .fila{cursor:pointer}" +
+
+    /* ── Tablet: un ancho intermedio, sin partir en dos ── */
+    "html.equipo-tablet .app{max-width:820px}" +
+    "html.equipo-tablet .modal .cuerpo{max-width:760px}" +
+    "html.equipo-tablet .tareas.rejilla{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}";
+  document.head.appendChild(s);
+
+  aplicar();
+
+  /* Se vuelve a mirar al cambiar la ventana o girar el equipo. Con una
+     espera corta para no recalcular en cada píxel del arrastre. */
+  let reloj = null;
+  const revisar = ()=>{ clearTimeout(reloj); reloj = setTimeout(aplicar, 150); };
+  window.addEventListener("resize", revisar);
+  window.addEventListener("orientationchange", revisar);
+})();
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
