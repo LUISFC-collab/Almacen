@@ -13661,6 +13661,35 @@ COLS_PEDIDO.push(
   {clave:"autorizado",     alias:["autorizado","autoriza","vb","visto bueno"]}
 );
 
+/* ---------------------------------------------------------------
+   V67  Fuera la revisión de nombres
+
+   Era un paso entre subir el archivo y enviar el pedido: por cada
+   material que no calzaba exacto con el catálogo, un desplegable
+   preguntando si es ese o es nuevo. Con veinte líneas son veinte
+   preguntas antes de poder mandar nada.
+
+   Qué se pierde y qué no, para que quede dicho:
+
+   · Lo que calza EXACTO con el catálogo se sigue enlazando solo, con su
+     código. Eso pasa al importar y no dependía de este bloque.
+   · Lo que no calza entra TAL COMO ESTÁ ESCRITO en el archivo. No se
+     acepta ninguna corrección a ciegas: aceptar el parecido automático
+     renombraría el material de alguien por una suposición, y eso es
+     peor que tener dos nombres para la misma cosa.
+   · Se deja de aprender equivalencias ("fierro 1/2" = "Varilla 1/2").
+     Antes cada corrección quedaba guardada para la próxima.
+
+   O sea: el catálogo puede terminar con el mismo material escrito de
+   dos formas. Se arregla desde Inventario, uniendo los dos. Si eso
+   empieza a molestar en obra, el camino es que la revisión aparezca
+   SOLO cuando el parecido es muy alto, en vez de por cada línea.
+   --------------------------------------------------------------- */
+pintarRevision = function(){
+  const cont = $("mr-revision");
+  if(cont) cont.innerHTML = "";
+};
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
