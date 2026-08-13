@@ -799,3 +799,66 @@
     });
   };
 })();
+
+/* ---------------------------------------------------------------
+   C7  Fuera el botón flotante de "Nuevo pedido"
+
+   El pedido ya no se levanta a mano desde una pantalla: se sube la
+   planilla. Ese botón flotante llevaba al mismo formulario que el
+   "Subir un requerimiento" del menú, tapando además la última fila de
+   la lista de pedidos.
+
+   Se quita SOLO el de pedidos. El mismo botón sirve a otras cuatro
+   pantallas —nuevo producto, nueva herramienta, nuevo operador, cargar
+   el Excel del consolidado— y ahí sigue siendo la única forma de crear.
+   Quitarlo entero habría dejado el inventario sin cómo dar de alta nada.
+
+   Y para que nadie quede sin camino: si el cargo puede crear pedidos y
+   su menú todavía no tiene una entrada para eso, se le agrega. Le pasa
+   al administrador trabajando en modo administración, cuyo menú son las
+   tareas de gobierno y ninguna de obra.
+   --------------------------------------------------------------- */
+(function sinFabDePedidoC7(){
+  if(typeof pintarFab !== "function") return;
+
+  /* 1 · el flotante no aparece en Pedidos */
+  var pintarFabC7 = pintarFab;
+  pintarFab = function(destino){
+    var r = pintarFabC7.apply(this, arguments);
+    if(destino === "pedidos"){
+      var fab = document.getElementById("fab");
+      if(fab){ fab.classList.remove("visible"); fab.onclick = null; }
+    }
+    return r;
+  };
+
+  /* 2 · y el menú siempre ofrece por dónde crearlo */
+  function sinTildes2(t){
+    return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  }
+
+  var pintarLateralC7 = pintarLateralV57;
+  pintarLateralV57 = function(){
+    pintarLateralC7.apply(this, arguments);
+    var nav = document.getElementById("lateral-v57");
+    if(!nav || typeof puede !== "function" || !puede("pedidos.crear")) return;
+    if(nav.querySelector("[data-nuevo-pedido-c7]")) return;
+
+    /* si ya hay una entrada que abre el requerimiento, no se duplica */
+    var yaHay = Array.prototype.some.call(nav.querySelectorAll(".op-lat span"), function(s){
+      var t = sinTildes2(s.textContent);
+      return t.indexOf("requerimiento") >= 0 || t.indexOf("nuevo pedido") >= 0;
+    });
+    if(yaHay) return;
+
+    var antesDe = nav.querySelector(".sep-lat") || null;
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "op-lat accion";
+    b.setAttribute("data-nuevo-pedido-c7", "1");
+    b.innerHTML = ico("agregar", 20) + "<span>Nuevo pedido</span>";
+    b.addEventListener("click", function(){ abrirRequerimiento(); });
+    if(antesDe) nav.insertBefore(b, antesDe);
+    else nav.appendChild(b);
+  };
+})();
