@@ -906,7 +906,8 @@
   s.id = "estilos-c8";
   s.textContent = [
     /* el cuadro se recorre solo, en los dos sentidos */
-    ".tabla-req{max-height:min(58vh,620px);overflow:auto}",
+    /* el alto lo fija la C9, midiendo lo que queda libre */
+    ".tabla-req{overflow:auto}",
 
     /* la cabecera se queda arriba mientras bajan las filas */
     ".tabla-req thead th{position:sticky;top:0;z-index:3}",
@@ -926,4 +927,70 @@
     ".tabla-req::-webkit-scrollbar-track{background:var(--cajon)}"
   ].join("");
   document.head.appendChild(s);
+})();
+
+/* ---------------------------------------------------------------
+   C9  El alto de la tabla, medido contra lo que queda libre
+
+   La C8 le puso un tope fijo (58% de la pantalla) y no alcanzó: lo que
+   va encima de la tabla —los dos botones, el aviso de la importación, la
+   tira con la obra— la empuja hacia abajo, y con eso su borde inferior
+   —donde vive la barra de izquierda a derecha— cae fuera de lo que se
+   ve. Había que bajar el formulario para alcanzarla, que es justo lo que
+   se quería evitar.
+
+   Ahora el alto se calcula: lo que queda entre donde empieza la tabla y
+   donde termina el formulario. Así la barra queda siempre pegada al
+   borde de abajo, a la vista, tenga lo que tenga encima.
+
+   Se vuelve a medir al abrir, al cargar un archivo, al agregar filas y
+   al cambiar el tamaño de la ventana — todo lo que puede mover la tabla
+   de sitio.
+   --------------------------------------------------------------- */
+(function altoDeLaTablaC9(){
+  var MINIMO = 180;   /* por debajo de esto no se ve ni una fila */
+
+  function medir(){
+    var caja = document.querySelector("#mr-items .tabla-req");
+    var cuerpo = document.querySelector("#modal-requerimiento .cuerpo");
+    if(!caja || !cuerpo) return;
+
+    /* si el modal está cerrado no hay nada que medir */
+    var modal = document.getElementById("modal-requerimiento");
+    if(!modal || !modal.classList.contains("abierto")) return;
+
+    caja.style.maxHeight = "none";
+    var arriba = caja.getBoundingClientRect().top;
+    var abajo = cuerpo.getBoundingClientRect().bottom;
+    var libre = Math.floor(abajo - arriba - 14);   /* aire para la barra */
+
+    caja.style.maxHeight = Math.max(MINIMO, libre) + "px";
+  }
+
+  /* Cada vez que se repinta la tabla, cambia lo que hay encima */
+  if(typeof pintarTablaReqV49 === "function"){
+    var pintarC9 = pintarTablaReqV49;
+    pintarTablaReqV49 = function(){
+      pintarC9.apply(this, arguments);
+      requestAnimationFrame(medir);
+    };
+  }
+
+  if(typeof abrirRequerimiento === "function"){
+    var abrirC9 = abrirRequerimiento;
+    abrirRequerimiento = function(){
+      var r = abrirC9.apply(this, arguments);
+      setTimeout(medir, 120);
+      setTimeout(medir, 500);   /* después de que llegue el formato */
+      return r;
+    };
+  }
+
+  var reloj = null;
+  window.addEventListener("resize", function(){
+    clearTimeout(reloj);
+    reloj = setTimeout(medir, 180);
+  });
+
+  window.medirTablaC9 = medir;
 })();
