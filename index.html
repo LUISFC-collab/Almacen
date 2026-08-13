@@ -12553,6 +12553,85 @@ registrarRequerimiento = function(){
   window.addEventListener("orientationchange", revisar);
 })();
 
+/* ---------------------------------------------------------------
+   V52  Arriba va el trabajo, no el saludo
+
+   La tarjeta del saludo ocupaba lo mejor de la primera pantalla para
+   decir el nombre y el cargo, que desde la V48 están en la barra de
+   arriba —visibles desde cualquier pantalla, no solo en Inicio—. El
+   botón de cambiar de cargo también subió ahí.
+
+   En ese lugar ahora van las dos cosas que se miran al abrir la app: el
+   resumen logístico y el avance del consolidado. Estaban al fondo, hay
+   que bajar toda la pantalla para verlos.
+
+   Se los deja planos: sin sombra, sin bloques de color rellenos, los
+   números grandes y una línea fina separando. El color queda solo donde
+   avisa algo —por comprar, stock crítico—, que es para lo que sirve.
+
+   La tarjeta del saludo se esconde, no se borra: `pintarInicio` le
+   escribe adentro en cada repintado y quitarla reventaría el Inicio.
+   --------------------------------------------------------------- */
+(function estilosV52(){
+  if($("estilos-v52")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v52";
+  s.textContent =
+    "#ini-saludo{display:none!important}" +
+
+    "#ini-cabecera-v52{display:grid;gap:10px;margin:0 0 16px}" +
+    "html.equipo-computadora #ini-cabecera-v52," +
+    "html.equipo-tablet #ini-cabecera-v52{grid-template-columns:1fr 1fr;align-items:stretch}" +
+    "#ini-cabecera-v52 > *{margin:0!important}" +
+
+    /* resumen logístico, plano */
+    "#ini-cabecera-v52 #ini-resumen{padding:15px 16px;border:1px solid var(--borde);" +
+      "box-shadow:none;display:flex;flex-direction:column;justify-content:space-between}" +
+    "#ini-cabecera-v52 #ini-resumen .cab{margin-bottom:13px}" +
+    "#ini-cabecera-v52 #ini-resumen .cifras{gap:0}" +
+    "#ini-cabecera-v52 #ini-resumen .cifra{background:transparent!important;padding:2px 4px}" +
+    "#ini-cabecera-v52 #ini-resumen .cifra + .cifra{border-left:1px solid var(--borde)}" +
+    "#ini-cabecera-v52 #ini-resumen .cifra b{font-size:23px;font-weight:600;line-height:1.1}" +
+    "#ini-cabecera-v52 #ini-resumen .cifra small{font-size:10.5px;font-weight:500;color:var(--tinta-sec)!important}" +
+
+    /* consolidado, mismo peso visual y anillo más chico */
+    "#ini-cabecera-v52 #ini-consolidado{padding:15px 16px;border:1px solid var(--borde);" +
+      "box-shadow:none;gap:14px!important}" +
+    "#ini-cabecera-v52 #ini-consolidado svg[role=img]{width:60px!important;height:60px!important}";
+  document.head.appendChild(s);
+})();
+
+function cabeceraInicioV52(){
+  const scr = $("scr-inicio"), saludo = $("ini-saludo");
+  const resumen = $("ini-resumen"), consolidado = $("ini-consolidado");
+  if(!scr || (!resumen && !consolidado)) return;
+
+  let caja = $("ini-cabecera-v52");
+  if(!caja){
+    caja = document.createElement("div");
+    caja.id = "ini-cabecera-v52";
+    /* justo donde estaba el saludo, que es lo primero de la pantalla */
+    if(saludo) saludo.insertAdjacentElement("afterend", caja);
+    else scr.insertBefore(caja, scr.firstElementChild);
+  }
+  /* Se reacomodan en cada repintado porque los dos se crean tarde, cuando
+     el cargo ya se sabe: hasta ese momento puede no existir ninguno. */
+  if(resumen && resumen.parentElement !== caja) caja.appendChild(resumen);
+  if(consolidado && consolidado.parentElement !== caja) caja.appendChild(consolidado);
+}
+
+const pintarInicioV52 = pintarInicio;
+pintarInicio = function(){ pintarInicioV52(); cabeceraInicioV52(); };
+
+/* El botón de cambiar de cargo vivía dentro de la tarjeta escondida; el
+   de la barra hace lo mismo y sí se ve. */
+const botonSimularEnSaludoV52 = botonSimularEnSaludo;
+botonSimularEnSaludo = function(){
+  botonSimularEnSaludoV52.apply(this, arguments);
+  const b = $("btn-simular-saludo");
+  if(b) b.remove();
+};
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
