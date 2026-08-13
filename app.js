@@ -13308,3 +13308,156 @@ ir = function(){ const r = irV69.apply(this, arguments); pintarBotonLateralV69()
     };
   }
 })();
+
+/* ---------------------------------------------------------------
+   V73  Al enviar, que salga también por correo
+
+   Dos cosas que una página web NO puede hacer, y conviene tenerlas
+   claras porque cambian la forma de resolverlo:
+
+   · No puede mirar qué programas hay instalados. No hay manera de
+     preguntarle a Windows si está el Outlook viejo o el nuevo — y es a
+     propósito, porque si una página pudiera listar los programas de la
+     máquina sería un problema de seguridad. Lo que sí pasa: al abrir un
+     correo se usa el que el equipo tenga puesto por defecto, sea el
+     viejo, el nuevo o el que sea. Eso es mejor que elegirlo nosotros:
+     acierta siempre, incluso en la máquina que no tiene ninguno de los
+     dos.
+
+   · Un enlace de correo (`mailto:`) NO puede llevar archivos adjuntos.
+     Es un límite del sistema, no del programa: si se pudiera, cualquier
+     página podría mandar archivos de su equipo sin que usted lo vea.
+
+   Entonces se hacen dos intentos, en este orden:
+
+   1. La hoja de compartir de Windows, que SÍ lleva el archivo adjunto.
+      Ahí aparece Outlook —el que esté instalado— y el requerimiento va
+      pegado al correo. Es el camino bueno.
+
+   2. Si el equipo no la tiene: se descarga el archivo y se abre el
+      correo con el destinatario, el asunto y el detalle ya escritos.
+      Solo queda arrastrar el archivo recién bajado. Un paso a mano,
+      pero nada que escribir.
+
+   El destinatario se busca entre las cuentas con correo @columbitosrl.com
+   —logística y jefatura primero, que son quienes reciben— y si no hay
+   ninguna cargada, se pregunta una vez y queda guardada.
+   --------------------------------------------------------------- */
+(function correoDelRequerimientoV73(){
+  var DOMINIO = "@columbitosrl.com";
+
+  function correosDeColumbito(){
+    var todos = (db.usuarios || []).filter(function(u){
+      return u.activo && String(u.correo || "").toLowerCase().indexOf(DOMINIO) > 0;
+    });
+    /* primero quienes reciben el pedido */
+    var reciben = todos.filter(function(u){
+      return ["jefatura", "compras", "obra"].indexOf(u.rol) >= 0;
+    });
+    var lista = (reciben.length ? reciben : todos).map(function(u){ return u.correo.trim(); });
+
+    /* y el que se haya escrito a mano alguna vez */
+    var guardado = (db.config || {}).correoLogistica;
+    if(guardado && lista.indexOf(guardado) < 0) lista.unshift(guardado);
+    return lista;
+  }
+
+  async function pedirCorreoUnaVez(){
+    var txt = await pedirTexto("¿A qué correo se manda?",
+      "Un correo " + DOMINIO + " de Logística");
+    if(txt == null) return null;
+    txt = String(txt).trim();
+    if(txt.toLowerCase().indexOf(DOMINIO) < 0){
+      snack("El correo tiene que ser " + DOMINIO + ".", "err");
+      return null;
+    }
+    db.config = db.config || {};
+    db.config.correoLogistica = txt;
+    guardar();
+    return txt;
+  }
+
+  /* El requerimiento en Excel, con las columnas del formato */
+  function excelDelPedido(r){
+    var filas = [["N°","DESCRIPCIÓN","UND","SOLICITADA","ENTREGA PARCIAL","ENTREGA TOTAL",
+                  "SOLICITANTE","LUGAR/FRENTE","AUTORIZADO","OBSERVACIONES"]];
+    (r.items || []).forEach(function(it, i){
+      filas.push([i + 1, it.desc || "", it.unidad || "", it.cant || "",
+                  it.entregaParcial || "", it.entregaTotal || "",
+                  it.solicitante || "", it.lugar || "", it.autorizado || "", it.obs || ""]);
+    });
+    var cab = [
+      ["REQUERIMIENTO DE MATERIALES"], [],
+      ["Obra:", r.obra || "", "", "N°", r.codigo || ""],
+      ["ÁREA :", r.disciplina || r.area || "", "", "FECHA DE SOLICITUD:", soloFecha(r.fecha)],
+      ["SUPERVISOR :", r.solicitante || "", "", "FECHA DE ENTREGA:", r.necesario || ""], []
+    ];
+    return crearXLSX([{nombre:"Requerimiento", filas:cab.concat(filas), estilos:[7]}]);
+  }
+
+  function textoDelPedido(r){
+    var l = ["Requerimiento " + (r.codigo || ""),
+             "Obra: " + (r.obra || "—"),
+             "Área: " + (r.disciplina || r.area || "—"),
+             "Solicitante: " + (r.solicitante || "—"),
+             "Prioridad: " + (r.prioridad || "—"),
+             "Necesario para: " + (r.necesario || "—"),
+             "", "Materiales (" + (r.items || []).length + "):"];
+    (r.items || []).forEach(function(it, i){
+      l.push("  " + (i + 1) + ". " + (it.desc || "") + " — " + (it.cant || "") + " " +
+             (it.unidad || "") + (it.lugar ? " · " + it.lugar : "") +
+             (it.obs ? " · " + it.obs : ""));
+    });
+    return l.join("\n");
+  }
+
+  async function enviarPorCorreoV73(r){
+    if(!r) return;
+    var para = correosDeColumbito();
+    if(!para.length){
+      var uno = await pedirCorreoUnaVez();
+      if(!uno) return;
+      para = [uno];
+    }
+
+    var nombre = "Requerimiento " + (r.codigo || "") + ".xlsx";
+    var asunto = "Requerimiento " + (r.codigo || "") +
+                 (r.obra ? " · " + r.obra : "") +
+                 (r.prioridad === "Urgente" ? " · URGENTE" : "");
+    var cuerpo = textoDelPedido(r);
+    var blob = excelDelPedido(r);
+
+    /* 1 · la hoja de compartir, que sí lleva el archivo pegado */
+    var fue = await compartirArchivo(nombre, blob, asunto, cuerpo);
+    if(fue){
+      log("pedidos", "Requerimiento compartido por correo", r.codigo, r.id);
+      return;
+    }
+
+    /* 2 · si no la hay: el archivo se baja y el correo se abre escrito */
+    descargarBlob(nombre, blob);
+    var enlace = "mailto:" + encodeURIComponent(para.join(",")) +
+                 "?subject=" + encodeURIComponent(asunto) +
+                 "&body=" + encodeURIComponent(
+                   cuerpo + "\n\n— Adjunte el archivo \"" + nombre + "\" que se acaba de descargar.");
+    window.location.href = enlace;
+    log("pedidos", "Correo de requerimiento abierto", r.codigo + " → " + para.join(", "), r.id);
+    snack("Se abrió el correo. Adjunte el archivo que se descargó.", "ok");
+  }
+
+  window.enviarPorCorreoV73 = enviarPorCorreoV73;
+
+  /* Se engancha al registro: el correo sale DESPUÉS de que el pedido
+     quedó guardado. Si algo falla en el correo, el pedido ya está: nunca
+     se pierde por un problema de Outlook. */
+  var registrarV73 = registrarRequerimiento;
+  registrarRequerimiento = function(){
+    var antes = (db.requerimientos || []).length;
+    var r = registrarV73.apply(this, arguments);
+    setTimeout(function(){
+      if((db.requerimientos || []).length <= antes) return;   /* no se registró */
+      enviarPorCorreoV73(db.requerimientos[0]);
+    }, 400);
+    return r;
+  };
+})();
