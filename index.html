@@ -12632,6 +12632,27 @@ botonSimularEnSaludo = function(){
   if(b) b.remove();
 };
 
+/* ---------------------------------------------------------------
+   V53  Un solo "Salir de la simulación"
+
+   Estaba en tres sitios a la vez: el aviso amarillo de arriba, el panel
+   lateral, y además un mosaico entre las tareas del cargo. El mosaico es
+   el que sobra —ocupa el lugar de una tarea de verdad y, siendo el único
+   de color, se lee como si fuera lo más importante de la pantalla.
+
+   Se quita solo el mosaico. La salida sigue donde se la busca: en el
+   propio aviso que dice que se está simulando (`#sim-salir`).
+
+   Se filtra acá, al final, porque el mosaico lo agregan cuatro bloques
+   distintos (V9.2 y las tres listas de tareas posteriores) y así no hay
+   que acordarse de ninguno.
+   --------------------------------------------------------------- */
+const tareasDelCargoV53 = tareasDelCargo;
+tareasDelCargo = function(){
+  return tareasDelCargoV53.apply(this, arguments)
+    .filter(x => !x || String(x.t || "").indexOf("Salir de la simulación") !== 0);
+};
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
