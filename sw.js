@@ -2,9 +2,9 @@
    Guarda la app en el celular y la abre SIN señal, pero SIEMPRE trae la
    version mas nueva cuando hay internet. Cambiar CACHE en cada despliegue
    para que nadie se quede con una version vieja. */
-const CACHE = 'almacen-cpq-v20260812f';
+const CACHE = 'almacen-cpq-v20260812g';
 const SHELL = ['./', './index.html', './config.js', './sync.js', './fotos.js', './heic2any.min.js', './manifest.json',
-               './icon-192.png', './icon-512.png'];
+               './icon-192.png', './icon-512.png', './formatos/FORMATO DE REQUERIMIENTO.xlsx'];
 
 self.addEventListener('install', function (e) {
   self.skipWaiting();

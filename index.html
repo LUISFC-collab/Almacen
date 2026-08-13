@@ -12653,6 +12653,209 @@ tareasDelCargo = function(){
     .filter(x => !x || String(x.t || "").indexOf("Salir de la simulación") !== 0);
 };
 
+/* ---------------------------------------------------------------
+   V54  La plantilla es el formato oficial de la obra
+
+   Hasta ahora el botón "Descargar plantilla" armaba un Excel de cuatro
+   columnas inventado por la app. El formato de verdad —el que firma
+   Logística— tiene cabecera con obra, número, área, supervisor y las dos
+   fechas, y la tabla lleva N°, DESCRIPCIÓN, UND, CANTIDAD (solicitada,
+   entrega parcial y entrega total), SOLICITANTE, LUGAR/FRENTE,
+   AUTORIZADO y OBSERVACIONES.
+
+   Ese archivo vive en el storage, en `formatos/`. Se baja de ahí y no
+   del código: si mañana cambia el formato, se reemplaza el archivo y
+   todos los equipos bajan el nuevo sin tocar la app ni volver a
+   desplegar nada.
+
+   Tres intentos, en este orden:
+     1. el storage        — el bueno, el que puede cambiar
+     2. la copia del repo — si no hay señal (el service worker la guarda)
+     3. el armado a mano  — último recurso, para no dejar a nadie sin nada
+   --------------------------------------------------------------- */
+const FORMATO_REQ_V54 =
+  "https://lotfscfgkgsnqwwnftoo.supabase.co/storage/v1/object/public/almacen-fotos/formatos/requerimiento.xlsx";
+const FORMATO_REQ_LOCAL_V54 = "formatos/FORMATO%20DE%20REQUERIMIENTO.xlsx";
+
+const plantillaRequerimientoV54 = plantillaRequerimiento;
+plantillaRequerimiento = async function(){
+  for(const url of [FORMATO_REQ_V54, FORMATO_REQ_LOCAL_V54]){
+    try{
+      const r = await fetch(url, {cache:"no-store"});
+      if(!r.ok) continue;
+      const blob = await r.blob();
+      if(blob.size < 1000) continue;   /* llegó una página de error, no el archivo */
+      descargarBlob("FORMATO DE REQUERIMIENTO.xlsx", blob);
+      snack("Formato descargado. Llénelo y súbalo.", "ok");
+      return;
+    }catch(e){ /* se prueba el siguiente */ }
+  }
+  snack("Sin señal: se descarga la plantilla simple.", "");
+  return plantillaRequerimientoV54.apply(this, arguments);
+};
+
+/* ---------------------------------------------------------------
+   V55  Las columnas del pedido, las del formato oficial
+
+   La planilla de la V49 tenía las cuatro columnas que la app ya
+   guardaba. El formato oficial pide dos más por línea: quién solicita
+   ese material y a qué lugar o frente va. Sin esas dos, al almacenero le
+   llega un pedido de veinte líneas sin saber para quién es cada una.
+
+   Las que NO se ponen acá y están en el formato —entrega parcial,
+   entrega total y autorizado— son de después: las llena el almacén al
+   despachar y Logística al aprobar. En el momento de pedir están vacías
+   siempre, y una columna que nadie llena solo estorba.
+   --------------------------------------------------------------- */
+COLS_REQ_V49.splice(0, COLS_REQ_V49.length,
+  {k:"desc",        t:"Descripción",   c:"c-desc", tipo:"text"},
+  {k:"cant",        t:"Cantidad",      c:"c-cant", tipo:"number"},
+  {k:"unidad",      t:"Und.",          c:"c-und",  tipo:"text"},
+  {k:"solicitante", t:"Solicitante",   c:"c-sol",  tipo:"text"},
+  {k:"lugar",       t:"Lugar / frente",c:"c-lug",  tipo:"text"},
+  {k:"obs",         t:"Observaciones", c:"c-obs",  tipo:"text"}
+);
+
+(function estilosColumnasV55(){
+  if($("estilos-v55")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v55";
+  s.textContent =
+    ".tabla-req table{min-width:760px}" +
+    ".tabla-req .c-sol{min-width:130px}.tabla-req .c-lug{min-width:130px}";
+  document.head.appendChild(s);
+})();
+
+/* Una línea nueva hereda quién pide y a dónde va: en un pedido de veinte
+   materiales casi siempre son los mismos, y escribirlos veinte veces en
+   el celular es lo que hace que la gente no los llene. */
+const filaVaciaV55 = filaVaciaV49;
+filaVaciaV49 = function(){
+  const base = filaVaciaV55();
+  const u = usuarioActual();
+  const ultima = itemsReq[itemsReq.length - 1];
+  base.solicitante = (ultima && ultima.solicitante) || (u ? u.nombre : "");
+  base.lugar = (ultima && ultima.lugar) || "";
+  return base;
+};
+
+/* ---------------------------------------------------------------
+   V56  Un cajón detrás, en pastel sobrio
+
+   Estaba todo blanco sobre casi blanco: las tarjetas no se despegaban
+   del fondo y la pantalla se leía como una sola mancha. El fondo en sí
+   estaba bien, lo que faltaba era que cada cosa se apoyara en algo.
+
+   Se le pone un cajón detrás —un azul grisáceo muy bajo, del mismo tono
+   de la app— y las tarjetas quedan blancas encima, con una línea fina.
+   Sobrio a propósito: en obra la pantalla se mira a pleno sol y los
+   colores fuertes cansan.
+   --------------------------------------------------------------- */
+(function estilosV56(){
+  if($("estilos-v56")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v56";
+  s.textContent =
+    ":root{--cajon:#E8EDF5;--cajon-borde:#D5DEEC;--cajon-hondo:#DFE6F1}" +
+
+    /* el cajón: la zona donde se trabaja deja de ser blanca */
+    ".app main{background:var(--cajon)}" +
+    "#drawer{background:var(--cajon)}" +
+
+    /* y lo que va encima se despega, con línea fina en vez de sombra */
+    ".app main .card,.app main .tarea,.app main .caja-v50,.app main .tabla-req," +
+    ".app main #ini-resumen,.app main #ini-consolidado," +
+    ".app main .fila,.app main .vacio{border:1px solid var(--cajon-borde)}" +
+
+    /* los bloques que agrupan van un tono más hondo que el cajón */
+    ".app main .caja-v50{background:var(--sup)}" +
+    ".app main .sech,.app main .sech-v50{color:var(--tinta-sec)}" +
+
+    /* la banda de simulación y las tarjetas de color no se tocan */
+    ".app main .tarea.destacada,.app main .card.acento{border-color:transparent}" +
+
+    /* en la tabla del pedido, la cabecera un punto más marcada */
+    ".tabla-req th{background:var(--cajon-hondo)}";
+  document.head.appendChild(s);
+})();
+
+/* ---------------------------------------------------------------
+   V57  En computadora, las secciones a la izquierda
+
+   En el celular se entra a cada sección por el panel que abre el avatar
+   y se vuelve con la flecha. En una laptop eso es un paso de más: hay
+   sitio de sobra para tener las secciones siempre a la vista.
+
+   Se arma una barra a la izquierda con los mismos destinos del panel
+   —misma lista `MENU`, mismos permisos— y al tocar uno cambia solo el
+   contenido: la barra se queda, marcando dónde está parado. En celular
+   y tablet no aparece: ahí el panel sigue siendo lo correcto.
+   --------------------------------------------------------------- */
+(function estilosLateralV57(){
+  if($("estilos-v57")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v57";
+  s.textContent =
+    "#lateral-v57{display:none}" +
+    "html.equipo-computadora .app{display:grid;grid-template-columns:238px 1fr;" +
+      "grid-template-rows:auto auto 1fr}" +
+    "html.equipo-computadora .app > #appbar,html.equipo-computadora .app > .simbanda{grid-column:1/-1}" +
+    "html.equipo-computadora .app > main{grid-column:2;grid-row:3;min-width:0}" +
+    "html.equipo-computadora #lateral-v57{display:block;grid-column:1;grid-row:3;" +
+      "overflow-y:auto;padding:12px 10px;background:var(--sup);" +
+      "border-right:1px solid var(--cajon-borde)}" +
+    "#lateral-v57 .op-lat{width:100%;display:flex;align-items:center;gap:11px;padding:10px 12px;" +
+      "border:0;background:transparent;border-radius:10px;font:inherit;font-size:14px;" +
+      "color:var(--tinta);text-align:left;cursor:pointer;margin-bottom:2px}" +
+    "#lateral-v57 .op-lat:hover{background:var(--cajon)}" +
+    "#lateral-v57 .op-lat.on{background:var(--pri-cont);color:var(--pri);font-weight:600}" +
+    "#lateral-v57 .op-lat svg{flex:0 0 auto}" +
+    "#lateral-v57 .op-lat .glob{margin-left:auto;background:var(--mal,#b42318);color:#fff;" +
+      "font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 6px}";
+  document.head.appendChild(s);
+})();
+
+function pintarLateralV57(){
+  const app = document.querySelector(".app");
+  if(!app || typeof MENU === "undefined") return;
+
+  let nav = $("lateral-v57");
+  if(!nav){
+    nav = document.createElement("nav");
+    nav.id = "lateral-v57";
+    nav.setAttribute("aria-label", "Secciones");
+    app.insertBefore(nav, app.querySelector("main"));
+  }
+  if(!sesion || !usuarioActual()){ nav.innerHTML = ""; return; }
+
+  const sinLeer = noLeidas();
+  let html = "";
+  MENU.forEach(k => {
+    if(k !== "mas" && PANTALLAS[k].perm && !puede(PANTALLAS[k].perm)) return;
+    html += '<button type="button" class="op-lat' + (pantalla === k ? " on" : "") +
+      '" data-ir-lat="' + k + '">' + ico(PANTALLAS[k].icono, 20) +
+      "<span>" + esc(PANTALLAS[k].titulo) + "</span></button>";
+  });
+  html += '<button type="button" class="op-lat' + (pantalla === "notificaciones" ? " on" : "") +
+    '" data-ir-lat="notificaciones">' + ico("campana", 20) + "<span>Notificaciones</span>" +
+    (sinLeer ? '<span class="glob">' + sinLeer + "</span>" : "") + "</button>";
+
+  nav.innerHTML = html;
+  $$("#lateral-v57 [data-ir-lat]").forEach(b =>
+    b.addEventListener("click", ()=> ir(b.dataset.irLat)));
+}
+
+/* Se repinta al cambiar de pantalla —para que se marque dónde está— y al
+   cambiar de cargo, que cambia qué secciones se pueden ver. */
+const irV57 = ir;
+ir = function(){ const r = irV57.apply(this, arguments); pintarLateralV57(); return r; };
+
+const aplicarRolV57 = aplicarRol;
+aplicarRol = function(){ aplicarRolV57.apply(this, arguments); pintarLateralV57(); };
+
+const pintarBadgeV57 = pintarBadge;
+pintarBadge = function(){ pintarBadgeV57.apply(this, arguments); pintarLateralV57(); };
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
