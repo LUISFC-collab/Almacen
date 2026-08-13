@@ -961,7 +961,9 @@
 
     caja.style.maxHeight = "none";
     var arriba = caja.getBoundingClientRect().top;
-    var abajo = cuerpo.getBoundingClientRect().bottom;
+    /* el borde de abajo del formulario, pero nunca más allá de la
+       ventana: si el cuerpo crece con el contenido, el tope no topa */
+    var abajo = Math.min(cuerpo.getBoundingClientRect().bottom, window.innerHeight);
     var libre = Math.floor(abajo - arriba - 14);   /* aire para la barra */
 
     caja.style.maxHeight = Math.max(MINIMO, libre) + "px";
@@ -1297,8 +1299,11 @@
       var scr = document.getElementById("scr-pedidos");
       if(!caja || !scr) return;
       caja.style.maxHeight = "none";
-      var libre = Math.floor(scr.getBoundingClientRect().bottom -
-                             caja.getBoundingClientRect().top - 14);
+      /* Se mide contra la VENTANA, no contra el contenedor: la pantalla
+         de pedidos crece con su contenido, así que con 37 pedidos el
+         "libre" daba 1600px y el tope no topaba nada — la barra quedaba
+         mil píxeles por debajo de lo que se ve. */
+      var libre = Math.floor(window.innerHeight - caja.getBoundingClientRect().top - 16);
       caja.style.maxHeight = Math.max(200, libre) + "px";
     });
   };
@@ -1404,8 +1409,8 @@
       var scr = document.getElementById("scr-pedidos");
       if(!caja || !scr) return;
       caja.style.maxHeight = "none";
-      var libre = Math.floor(scr.getBoundingClientRect().bottom -
-                             caja.getBoundingClientRect().top - 14);
+      /* contra la ventana, por lo mismo que en C12 */
+      var libre = Math.floor(window.innerHeight - caja.getBoundingClientRect().top - 16);
       caja.style.maxHeight = Math.max(220, libre) + "px";
     });
   }
