@@ -13166,6 +13166,122 @@ cabeceraInicioV52 = function(){
   cuentaActividadV61();
 };
 
+/* ---------------------------------------------------------------
+   V62  En computadora, todo pasa en el mismo hueco
+
+   El menú de la izquierda y la línea de arriba —actividad, resumen,
+   consolidado— se quedan siempre. Lo único que cambia al tocar un botón
+   es el hueco de la derecha. Antes, "Subir un requerimiento" tapaba la
+   pantalla entera: se perdía de vista dónde estaba uno parado y había
+   que cerrar para volver a ver los números.
+
+   Dos cosas hubo que mover para eso:
+
+   1. La línea de arriba vivía DENTRO de la pantalla de Inicio, así que
+      al ir a Pedidos desaparecía. Pasa a colgar de la app, al lado del
+      menú, y se queda en todas.
+
+   2. Los modales cuelgan de `body` y son `position:fixed` a pantalla
+      completa. No se pueden meter en la rejilla, así que se mide el
+      hueco de la derecha y se les dice exactamente dónde pararse. Se
+      vuelve a medir al cambiar el tamaño de la ventana.
+
+   En celular no cambia nada: ahí la pantalla completa ES lo correcto,
+   no hay espacio para dos cosas a la vez.
+   --------------------------------------------------------------- */
+(function estilosV62(){
+  if($("estilos-v62")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v62";
+  s.textContent =
+    /* la rejilla gana una fila: la línea fija va entre la barra y el hueco */
+    "html.equipo-computadora .app{grid-template-rows:auto auto auto 1fr}" +
+    "html.equipo-computadora .app > #appbar{grid-row:1}" +
+    "html.equipo-computadora .app > .simbanda{grid-row:2}" +
+    "html.equipo-computadora .app > #lateral-v57{grid-row:3/span 2}" +
+    "html.equipo-computadora .app > #ini-cabecera-v52{grid-column:2;grid-row:3;" +
+      "margin:14px 14px 0!important;padding:0}" +
+    "html.equipo-computadora .app > main{grid-row:4}" +
+
+    /* los modales se paran en el hueco medido, no en toda la pantalla */
+    "html.equipo-computadora .modal.abierto{top:var(--zona-y);left:var(--zona-x);" +
+      "right:auto;bottom:auto;width:var(--zona-w);height:var(--zona-h);" +
+      "border-left:1px solid var(--cajon-borde);animation:none}" +
+    "html.equipo-computadora .modal.abierto .cuerpo{max-width:none}" +
+    "html.equipo-computadora .modal.abierto .pie-modal{max-width:none}";
+  document.head.appendChild(s);
+})();
+
+/* Se mide el hueco de la derecha y se publica para que lo usen los modales */
+function medirZonaV62(){
+  const app = document.querySelector(".app");
+  const main = app && app.querySelector("main");
+  if(!main) return;
+  const b = main.getBoundingClientRect(), r = document.documentElement.style;
+  r.setProperty("--zona-x", Math.round(b.left) + "px");
+  r.setProperty("--zona-y", Math.round(b.top) + "px");
+  r.setProperty("--zona-w", Math.round(b.width) + "px");
+  r.setProperty("--zona-h", Math.round(b.height) + "px");
+}
+
+/* La línea de arriba deja de ser parte de Inicio y pasa a ser de la app */
+function cabeceraFijaV62(){
+  const app = document.querySelector(".app");
+  const caja = $("ini-cabecera-v52");
+  if(!app || !caja) return;
+  const enComputadora = document.documentElement.classList.contains("equipo-computadora");
+
+  if(enComputadora){
+    if(caja.parentElement !== app) app.insertBefore(caja, app.querySelector("main"));
+  }else{
+    /* de vuelta a Inicio: en celular es una tarjeta más de esa pantalla */
+    const scr = $("scr-inicio"), saludo = $("ini-saludo");
+    if(scr && caja.parentElement !== scr){
+      if(saludo) saludo.insertAdjacentElement("afterend", caja);
+      else scr.insertBefore(caja, scr.firstElementChild);
+    }
+  }
+  medirZonaV62();
+}
+
+/* Estando fija, los números tienen que seguir vivos fuera de Inicio:
+   los pintores originales solo corrían estando en la pantalla de Inicio. */
+function refrescarCabeceraV62(){
+  if(!sesion || !usuarioActual()) return;
+  try{ if(typeof pintarResumenLogistico === "function") pintarResumenLogistico(); }catch(e){}
+  try{ if(typeof pintarBotonConsolidadoV10 === "function") pintarBotonConsolidadoV10(); }catch(e){}
+  try{ cabeceraInicioV52(); }catch(e){}
+}
+
+const irV62 = ir;
+ir = function(){
+  const r = irV62.apply(this, arguments);
+  cabeceraFijaV62();
+  refrescarCabeceraV62();
+  return r;
+};
+
+const aplicarRolV62 = aplicarRol;
+aplicarRol = function(){ aplicarRolV62.apply(this, arguments); cabeceraFijaV62(); };
+
+/* Al abrir un modal se vuelve a medir: la banda de simulación puede haber
+   aparecido o desaparecido y el hueco cambió de sitio. */
+const abrirModalV62 = abrirModal;
+abrirModal = function(){ medirZonaV62(); const r = abrirModalV62.apply(this, arguments); medirZonaV62(); return r; };
+
+/* La V51 decide el tipo de equipo con 150 ms de espera. Si esto corriera
+   antes, leería la clase vieja y en el celular la línea se quedaría
+   colgada de la app en vez de volver a Inicio. */
+let relojZonaV62 = null;
+window.addEventListener("resize", ()=>{
+  clearTimeout(relojZonaV62);
+  relojZonaV62 = setTimeout(()=>{ cabeceraFijaV62(); medirZonaV62(); }, 260);
+});
+window.addEventListener("orientationchange", ()=>{
+  setTimeout(()=>{ cabeceraFijaV62(); medirZonaV62(); }, 300);
+});
+setTimeout(()=> { cabeceraFijaV62(); medirZonaV62(); }, 400);
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
