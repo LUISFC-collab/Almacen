@@ -1303,3 +1303,125 @@
     });
   };
 })();
+
+/* ---------------------------------------------------------------
+   C13  Que el cuadro sea lo que manda
+
+   Encima de la lista había cuatro cosas apiladas: el aviso del permiso,
+   la tarjeta de "Cómo avanza un pedido" con sus cinco pasos, y dos filas
+   de filtros. Entre todas se llevaban más de la mitad de la pantalla y a
+   la tabla —que es a lo que se entra— le quedaba una franja.
+
+   Qué se hace con cada una:
+
+   · El permiso pasa a UNA línea: el texto y los dos botones al costado.
+     Sigue estando y sigue siendo naranja, que para eso es un aviso, pero
+     ya no ocupa una tarjeta entera.
+
+   · "Cómo avanza un pedido" se pliega. Explica el circuito de cinco
+     pasos: se lee una vez y después estorba todos los días. Queda una
+     línea que se abre al tocarla, y recuerda si se dejó abierta.
+
+   · Los filtros se aprietan y van en una sola fila.
+
+   Todo lo que se ahorra se lo lleva la tabla, que se remide sola: la
+   cabecera pegada arriba y la barra de deslizar quedan siempre a la
+   vista, que es lo que se pidió.
+   --------------------------------------------------------------- */
+(function espacioParaLaTablaC13(){
+  var LLAVE = "almacen_circuito_abierto_c13";
+
+  var s = document.createElement("style");
+  s.id = "estilos-c13";
+  s.textContent = [
+    /* 1 · el permiso, en una línea */
+    "#permiso-v68{display:flex;align-items:center;gap:12px;flex-wrap:wrap;",
+      "padding:9px 12px!important;margin-bottom:8px!important}",
+    "#permiso-v68 b{font-size:13px!important;flex:0 0 auto}",
+    "#permiso-v68 .ayuda{margin:0!important;flex:1 1 220px;font-size:11.5px}",
+    "#permiso-v68 .btns{flex:0 0 auto;margin:0;display:flex;gap:8px}",
+    "#permiso-v68 .btns .btn{height:32px;padding:0 14px;font-size:12.5px;width:auto}",
+
+    /* 2 · el circuito, plegado */
+    "#pe-circuito{padding:0!important;margin-bottom:8px!important;overflow:hidden}",
+    "#pe-circuito .cabeza-c13{display:flex;align-items:center;gap:8px;padding:9px 12px;",
+      "cursor:pointer;font-size:12.5px;font-weight:600;color:var(--tinta-sec);user-select:none}",
+    "#pe-circuito .cabeza-c13:hover{color:var(--tinta)}",
+    "#pe-circuito .cabeza-c13 .flecha{transition:transform .18s;display:inline-block}",
+    "#pe-circuito.abierto-c13 .cabeza-c13 .flecha{transform:rotate(90deg)}",
+    "#pe-circuito .dentro-c13{display:none;padding:0 12px 12px}",
+    "#pe-circuito.abierto-c13 .dentro-c13{display:block}",
+
+    /* 3 · los filtros, apretados y en una fila */
+    "#pe-filtros,#pe-areas{gap:5px!important;margin-bottom:6px!important;flex-wrap:wrap}",
+    "#pe-filtros .chip,#pe-areas .chip,#pe-filtros button,#pe-areas button{",
+      "font-size:11.5px!important;padding:4px 10px!important}",
+
+    /* 4 · y el título de la pantalla no necesita tanto aire */
+    "#scr-pedidos > .sech{margin:6px 0 5px!important}"
+  ].join("");
+  document.head.appendChild(s);
+
+  function plegarCircuito(){
+    var c = document.getElementById("pe-circuito");
+    /* La tarjeta del circuito la crea otro bloque DESPUÉS de este
+       pintado, así que la primera vez todavía no está. Se vuelve a
+       intentar en el cuadro siguiente en lugar de rendirse. */
+    if(!c){ requestAnimationFrame(function(){
+      if(document.getElementById("pe-circuito")) plegarCircuito(); }); return; }
+    /* Se mira la ESTRUCTURA, no una marca: otro bloque vuelve a dibujar
+       la tarjeta y se lleva puesto el plegado, pero la marca quedaba y
+       entonces no se volvía a plegar nunca. */
+    if(c.querySelector(".cabeza-c13")) return;
+
+    /* lo que ya tenía dentro pasa a la parte que se abre */
+    var dentro = document.createElement("div");
+    dentro.className = "dentro-c13";
+    while(c.firstChild) dentro.appendChild(c.firstChild);
+
+    var cabeza = document.createElement("div");
+    cabeza.className = "cabeza-c13";
+    cabeza.innerHTML = '<span class="flecha">›</span><span>Cómo avanza un pedido</span>';
+
+    c.appendChild(cabeza);
+    c.appendChild(dentro);
+
+    var abierto = false;
+    try{ abierto = localStorage.getItem(LLAVE) === "1"; }catch(e){}
+    c.classList.toggle("abierto-c13", abierto);
+
+    cabeza.addEventListener("click", function(){
+      var ahora = c.classList.toggle("abierto-c13");
+      try{ localStorage.setItem(LLAVE, ahora ? "1" : "0"); }catch(e){}
+      remedir();
+    });
+  }
+
+  /* La tabla se queda con todo lo que sobra */
+  function remedir(){
+    requestAnimationFrame(function(){
+      var caja = document.querySelector("#pe-lista .tabla-ped");
+      var scr = document.getElementById("scr-pedidos");
+      if(!caja || !scr) return;
+      caja.style.maxHeight = "none";
+      var libre = Math.floor(scr.getBoundingClientRect().bottom -
+                             caja.getBoundingClientRect().top - 14);
+      caja.style.maxHeight = Math.max(220, libre) + "px";
+    });
+  }
+
+  if(typeof pintarPedidos === "function"){
+    var pintarC13 = pintarPedidos;
+    pintarPedidos = function(){
+      pintarC13.apply(this, arguments);
+      plegarCircuito();
+      remedir();
+    };
+  }
+
+  var reloj = null;
+  window.addEventListener("resize", function(){
+    clearTimeout(reloj);
+    reloj = setTimeout(remedir, 180);
+  });
+})();
