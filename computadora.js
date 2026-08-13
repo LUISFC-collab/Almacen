@@ -98,7 +98,11 @@
     num:46, desc:260, unidad:78, cant:96, entregaParcial:104,
     entregaTotal:104, solicitante:150, lugar:150, autorizado:120, obs:200, quita:44
   };
-  var MINIMO = 56;
+  /* Sin tope: la separación se puede arrastrar hasta cerrar la columna.
+     Por debajo de este ancho ya no se lee nada, así que cerrarla del todo
+     equivale a esconderla — es lo que hace Excel y es lo que espera la
+     mano que la está arrastrando. */
+  var CASI_CERRADA = 14;
 
   function anchos(){
     var g = {};
@@ -142,8 +146,14 @@
     ".tabla-req th{position:relative;user-select:none}",
     ".tabla-req th .tirador{position:absolute;top:0;right:-3px;width:7px;height:100%;",
       "cursor:col-resize;z-index:2}",
+    /* La separación se VE siempre, en plomo: si solo apareciera al pasar
+       por encima, nadie descubre que se puede mover. Se marca en azul al
+       apuntarla y en rojo cuando se la está por cerrar. */
+    ".tabla-req th .tirador::after{",
+      "content:'';position:absolute;left:2px;top:18%;width:2px;height:64%;",
+      "background:#98a2b3;border-radius:2px}",
     ".tabla-req th .tirador:hover::after,.tabla-req th.midiendo .tirador::after{",
-      "content:'';position:absolute;left:2px;top:0;width:2px;height:100%;background:var(--pri)}",
+      "top:0;height:100%;background:var(--pri)}",
     /* el texto baja de línea y nunca se sale del ancho de su columna */
     ".tabla-req textarea{width:100%;border:1px solid transparent;background:transparent;",
       "padding:7px;border-radius:8px;font:inherit;font-size:13.5px;color:inherit;resize:none;",
@@ -151,7 +161,10 @@
     ".tabla-req textarea:focus{border-color:var(--pri);background:var(--sup);outline:none}",
     ".tabla-req td{vertical-align:top}",
     ".tabla-req td.c-num{padding-top:13px}",
-    "body.arrastrando-col{cursor:col-resize;user-select:none}"
+    "body.arrastrando-col{cursor:col-resize;user-select:none}",
+    /* mientras se la arrastra hasta cerrar */
+    ".tabla-req th.por-cerrar{background:var(--mal-f,#fde8e8)}",
+    ".tabla-req th.por-cerrar .tirador::after{background:var(--mal,#b42318)!important}"
   ].join("");
   document.head.appendChild(s);
 
@@ -264,12 +277,20 @@
         var th = t.parentNode;
         if(!col) return;
         var x0 = e.clientX, w0 = col.getBoundingClientRect().width;
+        /* El ancho PEDIDO por el arrastre, que no es el dibujado: con
+           table-layout:fixed la celda nunca baja de sus rellenos (~14px),
+           así que mirando lo dibujado la columna no llega a cerrarse
+           nunca y el gesto de esconderla no se completaba. */
+        var pedido = w0;
         th.classList.add("midiendo");
         document.body.classList.add("arrastrando-col");
 
         var mover = function(ev){
-          var w = Math.max(MINIMO, Math.round(w0 + (ev.clientX - x0)));
+          var w = Math.max(0, Math.round(w0 + (ev.clientX - x0)));
+          pedido = w;
           col.style.width = w + "px";
+          /* aviso de que soltando ahí la columna se esconde */
+          th.classList.toggle("por-cerrar", w < CASI_CERRADA);
           /* Las celdas de texto se reacomodan al nuevo ancho, pero en el
              cuadro SIGUIENTE: medidas en el mismo, el navegador todavía
              no aplicó el ancho y se calcularía el alto contra el viejo. */
@@ -287,7 +308,22 @@
           document.removeEventListener("mousemove", mover);
           document.removeEventListener("mouseup", soltar);
           th.classList.remove("midiendo");
+          th.classList.remove("por-cerrar");
           document.body.classList.remove("arrastrando-col");
+
+          /* Cerrada del todo = escondida. Se guarda como oculta y se
+             repinta: queda la doble línea y vuelve con el anticlick. */
+          if(pedido < CASI_CERRADA && k !== "num" && k !== "quita"){
+            var esc0 = ocultas();
+            if(esc0.indexOf(k) < 0) esc0.push(k);
+            guardarOcultas(esc0);
+            /* se le devuelve un ancho usable para cuando vuelva */
+            var Av = anchos(); Av[k] = POR_DEFECTO[k] || 120; guardarAnchos(Av);
+            pintarItemsReq();
+            if(typeof snack === "function")
+              snack("Columna escondida. Anticlick en la doble línea para traerla.", "");
+            return;
+          }
           /* Un último reacomodo con el ancho ya asentado: durante el
              arrastre el alto puede quedar de más, y así cierra justo. */
           requestAnimationFrame(function(){
@@ -748,16 +784,6 @@
   s.id = "estilos-c6";
   s.textContent = [
     "html.equipo-computadora #btn-perfil{display:none!important}",
-    "#lateral-v57 .quien-c6{display:flex;align-items:center;gap:9px;padding:10px 12px 2px;margin-top:6px}",
-    "#lateral-v57 .quien-c6 .ini{width:30px;height:30px;border-radius:999px;background:var(--pri-cont);",
-      "color:var(--pri);font-weight:700;font-size:12.5px;display:flex;align-items:center;",
-      "justify-content:center;flex:0 0 auto;overflow:hidden}",
-    "#lateral-v57 .quien-c6 .ini img{width:100%;height:100%;object-fit:cover}",
-    "#lateral-v57 .quien-c6 .d{min-width:0}",
-    "#lateral-v57 .quien-c6 .d b{display:block;font-size:13px;font-weight:600;",
-      "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-    "#lateral-v57 .quien-c6 .d small{display:block;font-size:11px;color:var(--tinta-sec);",
-      "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     "#lateral-v57 .op-lat.salir-c6{color:var(--mal,#b42318)}",
     "#lateral-v57 .op-lat.salir-c6:hover{background:var(--mal-f,#fde8e8)}"
   ].join("");
@@ -768,23 +794,17 @@
     pintarSinCuenta.apply(this, arguments);
     var nav = document.getElementById("lateral-v57");
     var u = typeof usuarioActual === "function" ? usuarioActual() : null;
-    if(!nav || !u || nav.querySelector(".quien-c6")) return;
+    if(!nav || !u || nav.querySelector(".salir-c6")) return;
 
     var sep = document.createElement("div");
     sep.className = "sep-lat";
     nav.appendChild(sep);
 
-    var quien = document.createElement("div");
-    quien.className = "quien-c6";
-    quien.innerHTML =
-      '<span class="ini">' + (typeof fotoHTML === "function" ? fotoHTML(u) : esc(u.nombre[0])) + "</span>" +
-      '<span class="d"><b>' + esc(u.nombre) + "</b><small>" +
-      esc((ROLES[rolEfectivo()] || {}).nombre || "") + "</small></span>";
-    nav.appendChild(quien);
-
+    /* El nombre y el puesto NO se repiten acá: desde la V48 están en la
+       barra de arriba, donde se ven desde cualquier pantalla y no solo
+       al final del menú. */
     var ops = [
       {ic:"usuario", t:"Mi información", fn:function(){ verPerfil(); }},
-      {ic:"camara",  t:"Cambiar mi foto", fn:function(){ var f = document.getElementById("pf-foto"); if(f) f.click(); }},
       {ic:"salir",   t:"Cerrar sesión", clase:"salir-c6", fn:async function(){
         if(await confirmar("Cerrar sesión", "Volverá a la pantalla de inicio de sesión.", "Cerrar sesión")) salir();
       }}
