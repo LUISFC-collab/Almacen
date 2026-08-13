@@ -13690,6 +13690,270 @@ pintarRevision = function(){
   if(cont) cont.innerHTML = "";
 };
 
+/* ---------------------------------------------------------------
+   V68  Un pedido por día
+
+   La obra pide una vez al día. Si la Administradora sube un segundo
+   requerimiento el mismo día, no se rechaza: se guarda para MAÑANA. Así
+   nadie pierde lo que cargó, y logística recibe un pedido por día en vez
+   de tres sueltos.
+
+   Si de verdad hace falta uno más hoy —porque algo se subió mal, o entró
+   una urgencia— se le pide permiso a Logística. Mientras el permiso no
+   esté aprobado, lo subido queda para mañana igual: si Logística no
+   contesta o dice que no, el pedido del día que ya estaba queda como
+   está, y lo nuevo sale mañana. Aprobado el permiso, se mueve a hoy.
+
+   Dos decisiones que tomé y conviene revisar:
+
+   · Lo segundo del día SIEMPRE se registra, aunque sea para mañana.
+     Dejarlo sin registrar hasta que Logística conteste significaría que
+     la Administradora pierde lo que cargó si nadie contesta, y en obra
+     nadie contesta a las 6 de la tarde.
+   · El permiso vale por UN pedido y por ESE día. No queda abierto: al
+     otro día vuelve a regir la regla sola.
+
+   El permiso vive en `config`, que ya se sincroniza, para no tener que
+   crear otra tabla en la base por un dato que es uno por día.
+   --------------------------------------------------------------- */
+function diaDeManana(){
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function pedidosDelDia(dia){
+  return (db.requerimientos || []).filter(r =>
+    (r.diaPedido || diaLocal(r.fecha)) === dia && r.estado !== "rechazado");
+}
+
+function permisosDia(){
+  db.config = db.config || {};
+  db.config.permisoDia = db.config.permisoDia || {};
+  return db.config.permisoDia;
+}
+
+/* Estado del permiso de hoy: null | pendiente | aprobado | usado | rechazado */
+function permisoDeHoy(){
+  return permisosDia()[hoyISO()] || null;
+}
+
+function pedirPermisoDiaV68(){
+  const u = usuarioActual();
+  const p = {estado:"pendiente", pedidoPor:u.nombre, pedidoPorId:u.id, ts:ahora()};
+  permisosDia()[hoyISO()] = p;
+  notificar({roles:["compras","jefatura","admin"],
+    titulo:"Permiso para un segundo pedido de hoy",
+    cuerpo:u.nombre + " necesita cargar otro requerimiento hoy.\n" +
+           "Mientras no se apruebe, lo que subió queda para mañana.",
+    refTipo:"permisoDia", prioridad:"Alta"});
+  guardar();
+}
+
+function resolverPermisoV68(aprobado){
+  const p = permisoDeHoy();
+  if(!p || p.estado !== "pendiente") return;
+  const u = usuarioActual();
+  p.estado = aprobado ? "aprobado" : "rechazado";
+  p.resueltoPor = u.nombre;
+  p.resueltoTs = ahora();
+
+  if(aprobado){
+    /* Lo que se había guardado para mañana se trae a hoy: es lo que se
+       estaba pidiendo permiso para hacer. */
+    const manana = diaDeManana();
+    const movidos = (db.requerimientos || []).filter(r =>
+      r.diaPedido === manana && r.esperandoPermiso);
+    movidos.forEach(r => { r.diaPedido = hoyISO(); r.esperandoPermiso = false; });
+    if(movidos.length) p.estado = "usado";
+    log("pedidos", "Permiso de segundo pedido aprobado",
+        movidos.length + " pedido(s) pasan a hoy");
+  }else{
+    (db.requerimientos || []).forEach(r => { if(r.esperandoPermiso) r.esperandoPermiso = false; });
+    log("pedidos", "Permiso de segundo pedido rechazado", "queda el pedido del día");
+  }
+
+  notificar({usuarios:[p.pedidoPorId],
+    titulo:aprobado ? "Puede cargar otro pedido hoy" : "El pedido de hoy queda como está",
+    cuerpo:(aprobado
+      ? "Logística aprobó el segundo pedido: lo que había subido pasa a hoy."
+      : "Logística no aprobó un segundo pedido. Lo que subió queda para mañana.") +
+      "\nResuelto por " + u.nombre + ".",
+    refTipo:"permisoDia"});
+
+  guardar();
+  snack(aprobado ? "Permiso aprobado." : "Permiso rechazado.", aprobado ? "ok" : "");
+  refrescar(pantalla);
+}
+
+/* El registro decide a qué día va el pedido */
+const registrarRequerimientoV68 = registrarRequerimiento;
+registrarRequerimiento = function(){
+  const hoy = hoyISO();
+  const yaHay = pedidosDelDia(hoy).length > 0;
+  const permiso = permisoDeHoy();
+
+  /* Primero del día: va a hoy y no se pregunta nada */
+  if(!yaHay){
+    window.__diaDelPedidoV68 = hoy;
+    return registrarRequerimientoV68.apply(this, arguments);
+  }
+
+  /* Con permiso aprobado sin usar, este segundo sí es de hoy */
+  if(permiso && permiso.estado === "aprobado"){
+    permiso.estado = "usado";
+    window.__diaDelPedidoV68 = hoy;
+    return registrarRequerimientoV68.apply(this, arguments);
+  }
+
+  /* Si no, se guarda para mañana y se ofrece pedir el permiso */
+  window.__diaDelPedidoV68 = diaDeManana();
+  window.__esperandoPermisoV68 = true;
+  const r = registrarRequerimientoV68.apply(this, arguments);
+
+  const yaPidio = permiso && permiso.estado === "pendiente";
+  hoja("Ya hay un pedido de hoy",
+    "<p style='margin:4px 0 10px'>Este quedó guardado para <b>mañana</b>, así no se pierde nada.</p>" +
+    "<p class='ayuda' style='margin:0'>Si hace falta que salga hoy —porque algo se subió mal o entró una " +
+    "urgencia— Logística tiene que autorizarlo. Mientras tanto sigue siendo de mañana.</p>",
+    [yaPidio
+      ? {txt:"Ya está pedido", clase:"btn-cont"}
+      : {txt:"Pedir permiso a Logística", clase:"btn-pri", fn:()=>{
+          pedirPermisoDiaV68();
+          snack("Permiso pedido. Le avisamos cuando contesten.", "ok");
+        }},
+     {txt:"Está bien para mañana", clase:"btn-cont"}]);
+  return r;
+};
+
+/* Se le sella el día al pedido recién creado */
+const historiaV68 = historia;
+historia = function(r, estado, nota){
+  const res = historiaV68.apply(this, arguments);
+  if(r && !r.diaPedido && window.__diaDelPedidoV68){
+    r.diaPedido = window.__diaDelPedidoV68;
+    r.esperandoPermiso = !!window.__esperandoPermisoV68;
+    window.__diaDelPedidoV68 = null;
+    window.__esperandoPermisoV68 = false;
+  }
+  return res;
+};
+
+/* Aviso para Logística, arriba de la lista de pedidos */
+function avisoPermisoV68(){
+  const scr = $("scr-pedidos");
+  if(!scr) return;
+  let caja = $("permiso-v68");
+  const p = permisoDeHoy();
+  const puedeResolver = puede("compras") || puede("pedidos.aprobar");
+  if(!p || p.estado !== "pendiente" || !puedeResolver){ if(caja) caja.remove(); return; }
+
+  if(!caja){
+    caja = document.createElement("div");
+    caja.id = "permiso-v68";
+    caja.className = "card";
+    caja.style.cssText = "background:var(--alerta-f);border:1px solid var(--alerta);margin-bottom:12px";
+    scr.insertBefore(caja, scr.firstElementChild);
+  }
+  caja.innerHTML =
+    "<b style='display:block;font-size:14.5px'>Permiso para un segundo pedido de hoy</b>" +
+    "<p class='ayuda' style='margin:4px 0 10px'>" + esc(p.pedidoPor) +
+    " necesita cargar otro requerimiento hoy. Si no se aprueba, lo que subió sale mañana.</p>" +
+    '<div class="btns"><button class="btn btn-cont" id="permiso-no">No, queda para mañana</button>' +
+    '<button class="btn btn-ok" id="permiso-si">Autorizar</button></div>';
+  $("permiso-si").addEventListener("click", ()=> resolverPermisoV68(true));
+  $("permiso-no").addEventListener("click", ()=> resolverPermisoV68(false));
+}
+
+const refrescarV68 = refrescar;
+refrescar = function(destino){
+  const r = refrescarV68.apply(this, arguments);
+  if(destino === "pedidos") avisoPermisoV68();
+  return r;
+};
+
+/* ---------------------------------------------------------------
+   V69  El menú se pliega
+
+   En computadora el menú se queda fijo, y eso está bien para navegar
+   pero estorba cuando se está llenando una planilla de diez columnas:
+   son 238 px que le faltan a la tabla.
+
+   El botón va en el mismo hueco donde vive la flecha de volver, que en
+   computadora casi nunca se usa. Dos dibujos distintos a propósito:
+
+     · cerrado   → tres líneas, "acá hay un menú, ábralo"
+     · abierto   → tres líneas con la flecha hacia la izquierda,
+                   "esto se recoge para allá"
+
+   Con el mismo ícono en los dos estados no se sabe si va a abrir o a
+   cerrar hasta tocarlo.
+
+   Queda recordado en el equipo: quien lo cierra para trabajar cómodo no
+   tiene que volver a cerrarlo cada vez que entra.
+   --------------------------------------------------------------- */
+ICONOS.menu3 = '<path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/>';
+ICONOS.menu3cerrar = '<path d="M4 7h16M4 17h16" stroke-linecap="round"/>' +
+                     '<path d="M20 12H9M13 8l-4 4 4 4" stroke-linecap="round" stroke-linejoin="round"/>';
+
+(function estilosV69(){
+  if($("estilos-v69")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v69";
+  s.textContent =
+    /* solo en computadora: en celular el menú ya se abre por el avatar */
+    "#btn-lateral-v69{display:none}" +
+    "html.equipo-computadora #btn-lateral-v69{display:flex}" +
+    "html.equipo-computadora.lateral-cerrado .app{grid-template-columns:0 1fr}" +
+    "html.equipo-computadora.lateral-cerrado #lateral-v57{display:none}" +
+    /* la zona de la derecha se ensancha sola; los modales se remiden */
+    "html.equipo-computadora #lateral-v57{transition:none}";
+  document.head.appendChild(s);
+})();
+
+function pintarBotonLateralV69(){
+  const barra = $("appbar");
+  if(!barra) return;
+  let b = $("btn-lateral-v69");
+  if(!b){
+    b = document.createElement("button");
+    b.id = "btn-lateral-v69";
+    b.className = "icon-btn";
+    b.type = "button";
+    /* en el mismo hueco que la flecha de volver */
+    const volver = $("btn-volver");
+    if(volver) volver.insertAdjacentElement("afterend", b);
+    else barra.insertBefore(b, barra.firstElementChild);
+    b.addEventListener("click", ()=>{
+      const cerrado = document.documentElement.classList.toggle("lateral-cerrado");
+      try{ localStorage.setItem("almacen_lateral_v69", cerrado ? "1" : "0"); }catch(e){}
+      pintarBotonLateralV69();
+      /* los modales están parados sobre medidas viejas: se remiden */
+      setTimeout(()=>{ try{ medirZonaV62(); }catch(e){} }, 30);
+    });
+  }
+  const cerrado = document.documentElement.classList.contains("lateral-cerrado");
+  b.innerHTML = ico(cerrado ? "menu3" : "menu3cerrar", 22);
+  b.setAttribute("aria-label", cerrado ? "Abrir el menú" : "Recoger el menú");
+  b.title = b.getAttribute("aria-label");
+  b.setAttribute("aria-expanded", cerrado ? "false" : "true");
+}
+
+(function arranqueLateralV69(){
+  let guardado = null;
+  try{ guardado = localStorage.getItem("almacen_lateral_v69"); }catch(e){}
+  if(guardado === "1") document.documentElement.classList.add("lateral-cerrado");
+  pintarBotonLateralV69();
+})();
+
+/* La flecha de volver puede aparecer y desaparecer; el botón se repinta
+   con ella para no quedar suelto ni duplicado. */
+const aplicarRolV69 = aplicarRol;
+aplicarRol = function(){ aplicarRolV69.apply(this, arguments); pintarBotonLateralV69(); };
+
+const irV69 = ir;
+ir = function(){ const r = irV69.apply(this, arguments); pintarBotonLateralV69(); return r; };
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
