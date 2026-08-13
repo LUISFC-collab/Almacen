@@ -882,3 +882,48 @@
     else nav.appendChild(b);
   };
 })();
+
+/* ---------------------------------------------------------------
+   C8  La barra de deslizar, siempre a la vista
+
+   Con un pedido de veintinueve líneas la tabla se estiraba hacia abajo y
+   su barra horizontal quedaba al final de todo: para mover las columnas
+   de costado había que bajar la pantalla entera hasta el fondo, correr,
+   y volver a subir para ver lo que se estaba escribiendo. Con cada fila
+   que se agregaba, peor.
+
+   Ahora el cuadro de la tabla tiene su propio alto y sus propias barras:
+   las filas se recorren DENTRO del cuadro, y la barra de izquierda a
+   derecha se queda pegada a su borde de abajo, a la vista siempre.
+
+   Y la cabecera queda pegada arriba mientras se recorren las filas. En
+   una planilla de diez columnas, sin eso, en la fila veinte ya nadie
+   sabe si la columna que está llenando es "entrega parcial" o "entrega
+   total" — y son justo las dos que no conviene confundir.
+   --------------------------------------------------------------- */
+(function tablaConAltoPropioC8(){
+  var s = document.createElement("style");
+  s.id = "estilos-c8";
+  s.textContent = [
+    /* el cuadro se recorre solo, en los dos sentidos */
+    ".tabla-req{max-height:min(58vh,620px);overflow:auto}",
+
+    /* la cabecera se queda arriba mientras bajan las filas */
+    ".tabla-req thead th{position:sticky;top:0;z-index:3}",
+    /* el N° también se queda al correr de costado: sin él, en una tabla
+       ancha se pierde de vista a qué fila pertenece lo que se escribe */
+    ".tabla-req td.c-num,.tabla-req th.c-num{position:sticky;left:0;z-index:2;",
+      "background:var(--sup)}",
+    ".tabla-req th.c-num{z-index:4}",
+    /* la esquina de arriba a la izquierda pisa a las dos */
+    ".tabla-req thead th.c-num{background:var(--cajon-hondo)}",
+
+    /* barras finas, que no se coman el espacio de la tabla */
+    ".tabla-req::-webkit-scrollbar{width:11px;height:11px}",
+    ".tabla-req::-webkit-scrollbar-thumb{background:#98a2b3;border-radius:8px;",
+      "border:2px solid var(--sup)}",
+    ".tabla-req::-webkit-scrollbar-thumb:hover{background:#667085}",
+    ".tabla-req::-webkit-scrollbar-track{background:var(--cajon)}"
+  ].join("");
+  document.head.appendChild(s);
+})();
