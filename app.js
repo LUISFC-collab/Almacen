@@ -13123,3 +13123,65 @@ ir = function(){ const r = irV69.apply(this, arguments); pintarBotonLateralV69()
   }
 })();
 
+
+/* ---------------------------------------------------------------
+   V70  Que la plantilla baje de verdad
+
+   El botón no descargaba nada y no avisaba nada. La causa: la V54 hizo
+   que primero se bajara el formato del storage, y recién después se
+   disparara la descarga. Entre medio hay un `await`, y el navegador
+   considera que el click del usuario ya terminó — una descarga que no
+   sale de un gesto de la persona la bloquea en silencio. Ni error en la
+   consola ni archivo: el peor tipo de fallo.
+
+   La solución es no tener nada pendiente en el momento del click: el
+   formato se baja apenas se abre el requerimiento y queda listo en
+   memoria. Cuando se toca el botón ya no hay que esperar a nadie, y la
+   descarga sale dentro del mismo gesto.
+
+   Si todavía no terminó de llegar —red lenta, primer uso— se descarga
+   la plantilla simple armada al vuelo, que es instantánea. Vale más un
+   archivo enseguida que el archivo perfecto que no baja.
+   --------------------------------------------------------------- */
+(function plantillaListaV70(){
+  var listo = null;      /* {blob, nombre} cuando ya llegó */
+  var bajando = false;
+
+  function traer(){
+    if(listo || bajando) return;
+    bajando = true;
+    var fuentes = [FORMATO_REQ_V54, FORMATO_REQ_LOCAL_V54];
+    (function siguiente(i){
+      if(i >= fuentes.length){ bajando = false; return; }
+      fetch(fuentes[i], {cache:"no-store"})
+        .then(function(r){ return r.ok ? r.blob() : Promise.reject(new Error(r.status)); })
+        .then(function(b){
+          if(b.size < 1000) throw new Error("archivo vacío");
+          listo = {blob:b, nombre:"FORMATO DE REQUERIMIENTO.xlsx"};
+          bajando = false;
+        })
+        .catch(function(){ siguiente(i + 1); });
+    })(0);
+  }
+
+  /* Se empieza a bajar al abrir el requerimiento, no al tocar el botón */
+  var abrirV70 = abrirRequerimiento;
+  abrirRequerimiento = function(){
+    traer();
+    return abrirV70.apply(this, arguments);
+  };
+  traer();   /* y también de entrada, por si el modal ya estaba abierto */
+
+  /* El click no espera a nadie: o está el formato, o sale la simple */
+  var generarSimple = plantillaRequerimientoV54;
+  plantillaRequerimiento = function(){
+    if(listo){
+      descargarBlob(listo.nombre, listo.blob);
+      snack("Formato descargado. Llénelo y súbalo.", "ok");
+      return;
+    }
+    traer();
+    snack("Aún no llegó el formato oficial: se descarga la plantilla simple.", "");
+    return generarSimple.apply(this, arguments);
+  };
+})();
