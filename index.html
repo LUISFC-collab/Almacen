@@ -12856,6 +12856,305 @@ aplicarRol = function(){ aplicarRolV57.apply(this, arguments); pintarLateralV57(
 const pintarBadgeV57 = pintarBadge;
 pintarBadge = function(){ pintarBadgeV57.apply(this, arguments); pintarLateralV57(); };
 
+/* ---------------------------------------------------------------
+   V58  La actividad arriba, todo en una línea
+
+   Actividad reciente, resumen logístico y consolidado son las tres cosas
+   que se miran al abrir: cómo viene el día. Estaban repartidas, una
+   arriba y dos al fondo. Ahora van juntas en la primera línea.
+
+   En computadora entran las tres a lo ancho. En el celular no entran
+   —serían tres columnas de 110 px— así que se apilan, que es lo que
+   corresponde: la regla es "una línea si hay sitio", no "una línea
+   siempre".
+   --------------------------------------------------------------- */
+(function estilosV58(){
+  if($("estilos-v58")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v58";
+  s.textContent =
+    "html.equipo-computadora #ini-cabecera-v52{grid-template-columns:1.15fr 1fr 1fr;align-items:stretch}" +
+    "html.equipo-tablet #ini-cabecera-v52{grid-template-columns:1fr 1fr}" +
+    "#ini-cabecera-v52 #ini-actividad{margin:0}" +
+    "#ini-cabecera-v52 #ini-actividad .fila,#ini-cabecera-v52 #ini-actividad .card{height:100%;margin:0}";
+  document.head.appendChild(s);
+})();
+
+const cabeceraInicioV58 = cabeceraInicioV52;
+cabeceraInicioV52 = function(){
+  cabeceraInicioV58.apply(this, arguments);
+  const caja = $("ini-cabecera-v52"), act = $("ini-actividad");
+  /* la actividad va primera: es la que dice si pasó algo */
+  if(caja && act && act.parentElement !== caja) caja.insertBefore(act, caja.firstElementChild);
+};
+
+/* ---------------------------------------------------------------
+   V59  Los accesos, dentro del menú que ya está desplegado
+
+   En computadora el menú de la izquierda está siempre a la vista, así
+   que tener además una rejilla de mosaicos en el medio de la pantalla es
+   decir dos veces lo mismo y ocupar el lugar de la información.
+
+   Los accesos del cargo pasan al menú, debajo de las secciones. Y se
+   sacan los que repetían algo que ya estaba arriba: el mosaico
+   "Inventario" contra la sección Inventario, "Consolidado" contra
+   Consolidado de obra. Lo que NO se junta, aunque suene parecido:
+
+     · "Requerimiento" crea uno nuevo; "Pedidos" es la lista de todos.
+     · "Reporte" es el cierre del día; "Revisar" son los pedidos que
+       esperan su visto bueno.
+     · "Indicadores" son tiempos de atención; "Consolidado de obra" es el
+       avance de materiales.
+
+   Cada uno hace algo distinto: juntarlos sería perder una función, no
+   ahorrar un botón.
+   --------------------------------------------------------------- */
+function sinTildesV59(t){
+  return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+const pintarLateralV59 = pintarLateralV57;
+pintarLateralV57 = function(){
+  pintarLateralV59.apply(this, arguments);
+  const nav = $("lateral-v57");
+  if(!nav || !nav.children.length || typeof tareasDelCargo !== "function") return;
+
+  /* Lo que ya está en el menú no se repite abajo */
+  const yaEstan = [...nav.querySelectorAll(".op-lat span:first-of-type")]
+    .map(s => sinTildesV59(s.textContent));
+
+  /* "Consultar inventario" y la sección "Inventario" son lo mismo con un
+     verbo delante. Se le saca el verbo y se compara: si lo que queda es
+     una sección, el acceso sobra. Lo que NO queda igual al sacarlo
+     —"Revisar pedidos de los supervisores", "Ver avance e indicadores"—
+     se queda, porque lleva a otro lado. */
+  const sinVerbo = t => sinTildesV59(t)
+    .replace(/^(consultar|ver|ir a|abrir|entrar a|mostrar)\s+/, "")
+    .replace(/^(el|la|los|las|un|una)\s+/, "");
+
+  const tareas = tareasDelCargo().filter(t => {
+    const n = sinTildesV59(t.t), s = sinVerbo(t.t);
+    return !yaEstan.some(y => y === n || y === s);
+  });
+  if(!tareas.length) return;
+
+  const sep = document.createElement("div");
+  sep.className = "sep-lat";
+  nav.appendChild(sep);
+
+  tareas.forEach((t, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "op-lat accion";
+    b.innerHTML = ico(t.ic || "flecha", 20) + "<span>" + esc(t.t) + "</span>";
+    if(t.d) b.title = t.d;
+    b.addEventListener("click", ()=> { if(typeof t.fn === "function") t.fn(); });
+    nav.appendChild(b);
+  });
+};
+
+(function estilosV59(){
+  if($("estilos-v59")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v59";
+  s.textContent =
+    "#lateral-v57 .sep-lat{height:1px;background:var(--cajon-borde);margin:9px 8px}" +
+    "#lateral-v57 .op-lat.accion{color:var(--tinta-sec)}" +
+    "#lateral-v57 .op-lat.accion:hover{color:var(--tinta)}" +
+    /* con el menú desplegado, los mosaicos del medio sobran */
+    "html.equipo-computadora #ini-accesos,html.equipo-computadora #ini-accesos + .sech," +
+    "html.equipo-computadora .sech.accesos-v59{display:none}";
+  document.head.appendChild(s);
+})();
+
+/* El título "MIS TAREAS" queda huérfano al esconder la rejilla */
+const pintarInicioV59 = pintarInicio;
+pintarInicio = function(){
+  pintarInicioV59.apply(this, arguments);
+  const rejilla = $("ini-accesos");
+  const titulo = rejilla && rejilla.previousElementSibling;
+  if(titulo && titulo.classList.contains("sech")) titulo.classList.add("accesos-v59");
+};
+
+/* ---------------------------------------------------------------
+   V60  En qué anda la compra
+
+   Entre "aprobado" y "recibido" pasaban semanas en las que el pedido no
+   decía nada. El solicitante llamaba a Logística para preguntar, y
+   Logística lo anotaba aparte. Ahora se marca en el propio pedido:
+
+     Comprado · En fabricación · Empaquetando · Enviado · Otro
+
+   "Otro" pide escribir qué pasa —"esperando el flete de Lima", "el
+   proveedor cambió el modelo"— porque la obra siempre tiene un caso que
+   no entra en cuatro casillas, y si no hay dónde escribirlo se anota en
+   un cuaderno que nadie más ve.
+
+   Cada marca queda en el historial del pedido con quién y cuándo, y le
+   llega un aviso al que lo pidió: de eso se trata, de que no tenga que
+   llamar para saber.
+   --------------------------------------------------------------- */
+Object.assign(ESTADOS, {
+  comprado:     {texto:"Comprado",       chip:"ok"},
+  fabricacion:  {texto:"En fabricación", chip:"alerta"},
+  empaquetando: {texto:"Empaquetando",   chip:"alerta"},
+  enviado:      {texto:"Enviado",        chip:"lila"},
+  otro:         {texto:"Otro",           chip:"info"}
+});
+
+/* Siguen contando como "en curso": el pedido no terminó hasta que llega */
+["comprado","fabricacion","empaquetando","enviado","otro"].forEach(e => {
+  if(ABIERTOS.indexOf(e) < 0) ABIERTOS.push(e);
+});
+
+const AVANCE_V60 = [
+  {e:"comprado",     ic:"carrito",  t:"Comprado",       d:"Ya se compró; falta que llegue"},
+  {e:"fabricacion",  ic:"llave",    t:"En fabricación", d:"El proveedor lo está fabricando"},
+  {e:"empaquetando", ic:"caja",     t:"Empaquetando",   d:"Se está preparando para el envío"},
+  {e:"enviado",      ic:"camion",   t:"Enviado",        d:"Va en camino a la obra"},
+  {e:"otro",         ic:"editar",   t:"Otro",           d:"Escribir en qué anda"}
+];
+
+/* El texto libre de "Otro" se guarda aparte del estado, para que el chip
+   siga siendo un estado conocido y el detalle se lea debajo. */
+function marcarAvanceV60(id, estado){
+  const r = db.requerimientos.find(x => x.id === id);
+  if(!r) return;
+
+  const aplicar = (nota)=>{
+    historia(r, estado, nota || "");
+    r.avanceNota = estado === "otro" ? (nota || "") : "";
+    log("pedidos", "Avance de compra: " + ESTADOS[estado].texto, r.codigo + (nota ? " · " + nota : ""), r.id);
+    notificar({usuarios:[r.solicitanteId], titulo:"Su pedido: " + ESTADOS[estado].texto + " · " + r.codigo,
+      cuerpo:(nota ? nota + "\n" : "") + "Marcado por " + usuarioActual().nombre + ".",
+      refTipo:"requerimiento", refId:r.id});
+    if(!guardar()) return;
+    snack("Pedido marcado como " + ESTADOS[estado].texto.toLowerCase() + ".", "ok");
+    cerrarHoja();
+    refrescar(pantalla);
+  };
+
+  if(estado !== "otro") return aplicar("");
+  pedirTexto("¿En qué anda el pedido?", "Por ejemplo: esperando el flete de Lima")
+    .then(txt => { if(txt != null && String(txt).trim()) aplicar(String(txt).trim()); });
+}
+
+/* Se agrega al final de la hoja de detalle, que ya la arma `detalleReq` */
+const detalleReqV60 = detalleReq;
+detalleReq = function(id){
+  detalleReqV60.apply(this, arguments);
+
+  const r = db.requerimientos.find(x => x.id === id);
+  const cuerpo = $("hoja-cuerpo");
+  if(!r || !cuerpo || cuerpo.querySelector(".avance-v60")) return;
+
+  /* Solo lo marca quien maneja la compra */
+  if(!puede("compras") && !puede("pedidos.aprobar")) return;
+  /* Y solo mientras el pedido siga vivo */
+  if(CERRADOS.indexOf(r.estado) >= 0) return;
+
+  const caja = document.createElement("div");
+  caja.className = "avance-v60";
+  caja.innerHTML =
+    '<div class="sech" style="margin:16px 0 8px">En qué anda la compra</div>' +
+    (r.avanceNota ? '<p class="ayuda" style="margin:0 0 9px">Ahora: ' + esc(r.avanceNota) + "</p>" : "") +
+    '<div class="avance-ops">' + AVANCE_V60.map(o =>
+      '<button type="button" class="avance-op' + (r.estado === o.e ? " on" : "") +
+      '" data-avance="' + o.e + '" title="' + esc(o.d) + '">' +
+      ico(o.ic, 19) + "<span>" + esc(o.t) + "</span></button>").join("") + "</div>";
+  cuerpo.appendChild(caja);
+
+  cuerpo.querySelectorAll("[data-avance]").forEach(b =>
+    b.addEventListener("click", ()=> marcarAvanceV60(id, b.dataset.avance)));
+};
+
+(function estilosV60(){
+  if($("estilos-v60")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v60";
+  s.textContent =
+    ".avance-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px}" +
+    ".avance-op{display:flex;align-items:center;gap:8px;padding:11px 12px;border-radius:10px;" +
+      "border:1px solid var(--cajon-borde);background:var(--sup);font:inherit;font-size:13px;" +
+      "color:var(--tinta);cursor:pointer;text-align:left}" +
+    ".avance-op:active{transform:scale(.98)}" +
+    ".avance-op.on{background:var(--pri-cont);border-color:var(--pri);color:var(--pri);font-weight:600}" +
+    ".avance-op svg{flex:0 0 auto}";
+  document.head.appendChild(s);
+})();
+
+/* ---------------------------------------------------------------
+   V61  La actividad, solo el reloj
+
+   Ocupaba un tercio de la primera línea para decir "100 registros ·
+   último hace 6 min". El número importa de reojo; el detalle, solo
+   cuando alguien lo va a mirar.
+
+   Queda el reloj con la cantidad encima, del ancho de un botón. Al
+   tocarlo se abre la lista completa, que es donde el detalle sirve.
+
+   Se le esconde el texto al botón que ya existía en vez de armar uno
+   nuevo: así el clic sigue yendo a donde iba, sin volver a engancharlo.
+   --------------------------------------------------------------- */
+(function estilosV61(){
+  if($("estilos-v61")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v61";
+  s.textContent =
+    /* el reloj toma lo que necesita; el resto de la línea se reparte */
+    "html.equipo-computadora #ini-cabecera-v52{grid-template-columns:auto 1fr 1fr}" +
+    "html.equipo-computadora #ini-cabecera-v52.sin-actividad," +
+    "html.equipo-tablet #ini-cabecera-v52.sin-actividad{grid-template-columns:1fr 1fr}" +
+    "html.equipo-tablet #ini-cabecera-v52{grid-template-columns:auto 1fr}" +
+
+    "#ini-cabecera-v52 #ini-actividad .fila{width:auto;height:100%;padding:14px;gap:0;" +
+      "justify-content:center;align-items:center}" +
+    "#ini-cabecera-v52 #ini-actividad .fila .txt," +
+    "#ini-cabecera-v52 #ini-actividad .fila .der{display:none}" +
+    "#ini-cabecera-v52 #ini-actividad .fila .mini{position:relative;margin:0}" +
+    "#ini-cabecera-v52 #ini-actividad .cuenta-v61{position:absolute;top:-7px;right:-9px;" +
+      "min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--pri);" +
+      "color:var(--sobre-pri);font-size:10.5px;font-weight:700;line-height:19px;text-align:center;" +
+      "box-shadow:0 0 0 2px var(--sup)}" +
+
+    /* en el celular no se encoge: ahí hay una línea por tarjeta y el
+       texto se lee bien */
+    "html.equipo-celular #ini-cabecera-v52 #ini-actividad .fila{width:100%;justify-content:flex-start}" +
+    "html.equipo-celular #ini-cabecera-v52 #ini-actividad .fila .txt," +
+    "html.equipo-celular #ini-cabecera-v52 #ini-actividad .fila .der{display:''}";
+  document.head.appendChild(s);
+})();
+
+function cuentaActividadV61(){
+  const cont = $("ini-actividad"), caja = $("ini-cabecera-v52");
+  if(!cont) return;
+
+  /* La app le esconde la actividad a todo el que no sea Administradora de
+     Obra o administrador. Cuando no está, la línea se reparte entre dos y
+     no queda una columna vacía. */
+  if(caja) caja.classList.toggle("sin-actividad", cont.classList.contains("oculto"));
+
+  const mini = cont.querySelector(".fila .mini");
+  if(!mini) return;
+  const n = (db.historial || []).length;
+  let g = mini.querySelector(".cuenta-v61");
+  if(!n){ if(g) g.remove(); return; }
+  if(!g){
+    g = document.createElement("span");
+    g.className = "cuenta-v61";
+    mini.appendChild(g);
+  }
+  g.textContent = n > 999 ? "999+" : n;
+  const f = cont.querySelector(".fila");
+  if(f) f.title = n + " registros de actividad · tóquelo para ver el detalle";
+}
+
+const cabeceraInicioV61 = cabeceraInicioV52;
+cabeceraInicioV52 = function(){
+  cabeceraInicioV61.apply(this, arguments);
+  cuentaActividadV61();
+};
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
