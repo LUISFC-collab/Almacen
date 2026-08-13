@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Base de datos · Almacén Minero</title>
+<style>
+  :root {
+    --fondo:#F4F6FA; --sup:#FFFFFF; --sup2:#EDF1F7; --linea:#DCE3ED;
+    --tinta:#1A1F27; --tinta2:#5B6672;
+    --pri:#1B4B8F; --sec:#F5B70A; --sobre-sec:#3D2E00;
+    --ok:#1F7A4D; --ok-f:#E3F1E9; --alerta:#C77700; --alerta-f:#FDF0DC;
+    --vivo:#5B4BB7; --vivo-f:#EAE7F8; --info:#3A5BA8; --info-f:#E4EAF8;
+  }
+  :root:not([data-theme="light"]) {}
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fondo:#12161C; --sup:#1A2029; --sup2:#232B36; --linea:#2E3845;
+      --tinta:#E8ECF2; --tinta2:#9AA6B4;
+      --pri:#7CA5E0; --ok-f:#153024; --alerta-f:#3A2A0E; --vivo-f:#241F3D; --info-f:#18233C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --fondo:#12161C; --sup:#1A2029; --sup2:#232B36; --linea:#2E3845;
+    --tinta:#E8ECF2; --tinta2:#9AA6B4;
+    --pri:#7CA5E0; --ok-f:#153024; --alerta-f:#3A2A0E; --vivo-f:#241F3D; --info-f:#18233C;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; padding:26px 18px 60px; background:var(--fondo); color:var(--tinta);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    line-height:1.5; font-size:15px;
+  }
+  .caja { max-width:1000px; margin:0 auto; }
+  header { margin-bottom:26px; }
+  h1 { font-size:26px; margin:0 0 4px; letter-spacing:-.02em; }
+  .sub { color:var(--tinta2); font-size:14px; margin:0; }
+  h2 { font-size:19px; margin:34px 0 12px; letter-spacing:-.01em; }
+  h3 { font-size:13px; text-transform:uppercase; letter-spacing:.07em;
+        color:var(--tinta2); margin:22px 0 9px; }
+  p { margin:0 0 12px; }
+  .cifras { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:11px; }
+  .cifra { background:var(--sup); border-radius:13px; padding:14px; }
+  .cifra b { display:block; font-size:27px; font-weight:600; letter-spacing:-.02em; }
+  .cifra small { color:var(--tinta2); font-size:12px; }
+  .nota { background:var(--sup); border-left:3px solid var(--sec); border-radius:11px;
+           padding:13px 15px; margin:0 0 14px; font-size:14px; }
+  .nota b { font-weight:600; }
+  .grupo { display:grid; gap:8px; margin-bottom:6px; }
+  details.tabla { background:var(--sup); border-radius:12px; overflow:hidden; }
+  details.tabla summary { cursor:pointer; padding:12px 14px; display:flex;
+    align-items:center; gap:10px; flex-wrap:wrap; list-style:none; }
+  details.tabla summary::-webkit-details-marker { display:none; }
+  details.tabla summary::before { content:"▸"; color:var(--tinta2); font-size:12px; }
+  details.tabla[open] summary::before { content:"▾"; }
+  details.tabla summary b { font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:14px; font-weight:600; }
+  .n { color:var(--tinta2); font-size:12px; }
+  .marcas { margin-left:auto; display:flex; gap:5px; flex-wrap:wrap; }
+  .chip { font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:99px;
+    background:var(--sup2); color:var(--tinta2); white-space:nowrap; }
+  .chip.ok { background:var(--ok-f); color:var(--ok); }
+  .chip.info { background:var(--info-f); color:var(--info); }
+  .chip.vivo { background:var(--vivo-f); color:var(--vivo); }
+  .chip.alerta { background:var(--alerta-f); color:var(--alerta); }
+  .desc { padding:0 14px; color:var(--tinta2); font-size:13px; margin:0 0 10px; }
+  .scroll { overflow-x:auto; padding:0 14px 14px; }
+  table.cols { border-collapse:collapse; width:100%; font-size:12.5px; }
+  table.cols td { padding:5px 9px 5px 0; border-bottom:1px solid var(--linea); }
+  table.cols td.c { font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; }
+  table.cols td.t { color:var(--tinta2); }
+  table.cols td.m { text-align:right; color:var(--pri); font-size:11px; font-weight:600; }
+  .flujo { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:11px; }
+  .paso { background:var(--sup); border-radius:12px; padding:14px; }
+  .paso b { display:block; font-size:14px; margin-bottom:5px; }
+  .paso small { color:var(--tinta2); font-size:12.5px; line-height:1.45; }
+  .paso .num { display:inline-flex; width:22px; height:22px; border-radius:99px;
+    background:var(--pri); color:#fff; align-items:center; justify-content:center;
+    font-size:11px; font-weight:700; margin-bottom:8px; }
+  pre { background:var(--sup); border-radius:11px; padding:13px; overflow-x:auto;
+    font-size:12.5px; line-height:1.55; margin:0 0 14px;
+    font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .mal { color:#B4232A; } .bien { color:var(--ok); }
+  .archivos { display:grid; gap:7px; }
+  .arch { background:var(--sup); border-radius:11px; padding:12px 14px;
+    display:flex; align-items:center; gap:11px; }
+  .arch b { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; }
+  .arch small { color:var(--tinta2); font-size:12.5px; }
+  .arch .orden { width:24px; height:24px; border-radius:7px; background:var(--sup2);
+    color:var(--tinta2); display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:700; flex:none; }
+  footer { margin-top:40px; padding-top:18px; border-top:1px solid var(--linea);
+    color:var(--tinta2); font-size:12.5px; }
+</style>
+</head>
+<body>
+
+<div class="caja">
+<header>
+  <h1>Base de datos · Almacén Minero</h1>
+  <p class="sub">Consorcio CPQ · Mina Columbito · PostgreSQL 15 sobre Supabase · 12 de agosto de 2026</p>
+</header>
+
+<div class="cifras">
+  <div class="cifra"><b>25</b><small>tablas</small></div>
+  <div class="cifra"><b>349</b><small>columnas</small></div>
+  <div class="cifra"><b>13</b><small>en tiempo real</small></div>
+  <div class="cifra"><b>18</b><small>validaciones</small></div>
+  <div class="cifra"><b>445</b><small>renglones de consolidado</small></div>
+  <div class="cifra"><b>142</b><small>materiales cargados</small></div>
+</div>
+
+<h2>Las tres ideas que sostienen todo</h2>
+
+<div class="nota">
+  <b>Lápida.</b> Nada se borra de verdad. Al eliminar se marca <code>eliminado_en</code> y la fila
+  se queda. Si se borrara físicamente, el celular que estuvo sin señal nunca se enteraría de la
+  baja y el registro reviviría en la siguiente sincronización.
+</div>
+
+<div class="nota">
+  <b>Versión.</b> Cada fila lleva un contador que sube en cada cambio. El celular pide
+  «dame lo que tenga versión mayor a la última que vi» y se trae solo lo nuevo, en vez de
+  descargar la tabla entera cada vez.
+</div>
+
+<div class="nota">
+  <b>Suma atómica.</b> El stock jamás se escribe con un número calculado en el celular.
+  Se manda el delta y la base suma dentro de la transacción. Es lo único que evita que dos
+  almaceneros registrando a la vez se pisen.
+</div>
+
+<pre><span class="mal">-- Mal: si dos celulares suben a la vez, el segundo pisa al primero</span>
+update materiales set stock = 64 where id = ...;
+
+<span class="bien">-- Bien: los dos suman, y la base valida que no quede negativo</span>
+select update_add_stock(id, +40, 'ingreso', 'EG07 - 00000276');</pre>
+
+<h2>Qué pasa cuando el almacén registra un ingreso</h2>
+<div class="flujo">
+  <div class="paso"><span class="num">1</span><b>Cuenta en el celular</b>
+    <small>Aunque no haya señal. Se guarda local con una clave de idempotencia.</small></div>
+  <div class="paso"><span class="num">2</span><b>Sube a la cola</b>
+    <small>Cuando vuelve la cobertura. Si el reintento repite la clave, la base lo ignora
+    en vez de duplicar el movimiento.</small></div>
+  <div class="paso"><span class="num">3</span><b>La base valida</b>
+    <small>Bloquea la fila, comprueba que el stock no quede negativo, suma el delta y
+    escribe el movimiento con su saldo.</small></div>
+  <div class="paso"><span class="num">4</span><b>Llega a los demás</b>
+    <small>Sin que nadie recargue nada. La Administradora de Obra ve el ingreso en su
+    pantalla en el momento.</small></div>
+</div>
+
+<h2>Las tablas</h2>
+<p class="sub">Toque cualquiera para ver sus columnas.</p>
+<h3>Personas</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>usuarios</b>
+    <span class="n">21 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip alerta">2 validaciónes</span></span>
+  </summary>
+  <p class="desc">Quién entra a la app. El fotocheck es el usuario.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">usuario</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">nombre</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">fotocheck</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">cargo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">area</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">rol</td><td class="t">rol_app</td><td class="m">obl.</td></tr><tr><td class="c">es_admin</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">activo</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">dni</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">celular</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">correo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">permisos_extra</td><td class="t">text[]</td><td class="m">obl.</td></tr><tr><td class="c">ultimo_acceso</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">auth_uid</td><td class="t">uuid</td><td class="m"></td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m"></td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>personal</b>
+    <span class="n">13 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">Trabajadores que reciben material o herramientas. No entran a la app.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">nombre</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">dni</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">cargo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">area</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">celular</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">activo</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details></div><h3>Catálogo</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>materiales</b>
+    <span class="n">16 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">2 validaciónes</span></span>
+  </summary>
+  <p class="desc">El catálogo con su stock. Solo se mueve con suma atómica.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">codigo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">nombre</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">clave_busqueda</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">categoria</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">stock</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">minimo</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">alta_desde</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>herramientas</b>
+    <span class="n">15 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">Cada herramienta con su marca, modelo y serie.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">codigo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">nombre</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">marca</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">modelo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">serie</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">categoria</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">estado</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">foto_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details></div><h3>Consolidado</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>consolidado</b>
+    <span class="n">19 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">3 validaciónes</span></span>
+  </summary>
+  <p class="desc">El alcance aprobado de la obra. 445 renglones.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">codigo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">descripcion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">clave_busqueda</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">requerido</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">comprado</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">entregado</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">n_requerimiento</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">categoria</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">origen</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">adicional</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">archivo_origen</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>consolidado_alias</b>
+    <span class="n">8 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span></span>
+  </summary>
+  <p class="desc">Nombres distintos del mismo material, ya emparejados.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">consolidado_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">alias</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">clave_alias</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">confirmado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details></div><h3>Requerimientos</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>requerimientos</b>
+    <span class="n">22 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span></span>
+  </summary>
+  <p class="desc">El pedido. Guarda quién lo pidió y quién lo tecleó.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">codigo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">solicitante_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">solicitante_nombre</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">solicitante_cargo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">levantado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">area</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">obra</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">frente</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">prioridad</td><td class="t">prioridad_req</td><td class="m">obl.</td></tr><tr><td class="c">necesario_para</td><td class="t">date</td><td class="m"></td></tr><tr><td class="c">estado</td><td class="t">estado_req</td><td class="m">obl.</td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">justificacion</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">enviado_logistica</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">enviado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>requerimiento_items</b>
+    <span class="n">17 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">2 validaciónes</span></span>
+  </summary>
+  <p class="desc">Sus renglones. Sin consolidado_id significa adicional.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">requerimiento_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">orden</td><td class="t">int</td><td class="m">obl.</td></tr><tr><td class="c">descripcion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">cantidad</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">consolidado_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">frente</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">es_nuevo</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">entregado</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>requerimiento_historial</b>
+    <span class="n">7 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">Cada cambio de estado, con su fecha y su autor.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">requerimiento_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">estado</td><td class="t">estado_req</td><td class="m">obl.</td></tr><tr><td class="c">nota</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">usuario_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">usuario_nombre</td><td class="t">text</td><td class="m"></td></tr></tbody></table></div>
+</details></div><h3>Despachos</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>despachos</b>
+    <span class="n">23 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">La guía que genera logística al despachar.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">numero</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">serie</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">correlativo</td><td class="t">bigint</td><td class="m">obl.</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">emision</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">inicio_traslado</td><td class="t">date</td><td class="m">obl.</td></tr><tr><td class="c">motivo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">punto_partida</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">punto_llegada</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">modalidad</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">transportista</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">peso_bruto_kgm</td><td class="t">numeric(14,3)</td><td class="m"></td></tr><tr><td class="c">observaciones</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">numero_sunat</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">estado</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">enviado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">automatica</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>despacho_lineas</b>
+    <span class="n">14 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">2 validaciónes</span></span>
+  </summary>
+  <p class="desc">Lo que dice la guía que trae.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">despacho_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">orden</td><td class="t">int</td><td class="m">obl.</td></tr><tr><td class="c">descripcion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">cantidad</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">codigo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">consolidado_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">recibido</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details></div><h3>Recepciones</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>recepciones</b>
+    <span class="n">17 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span></span>
+  </summary>
+  <p class="desc">Lo que el almacén contó de verdad.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">despacho_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">recibido_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">sin_guia</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">guia_tardia</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">vinculada_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">vinculada_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">conforme</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">foto_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr><tr><td class="c">check</td><td class="t">((sin_guia and despacho_id is null) or (not sin_guia and despacho_id is</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>recepcion_lineas</b>
+    <span class="n">12 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">Renglón por renglón: declarado contra contado.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">recepcion_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">descripcion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">declarado</td><td class="t">numeric(14,3)</td><td class="m"></td></tr><tr><td class="c">contado</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">despacho_linea_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">resultado</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details></div><h3>Almacén</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>movimientos</b>
+    <span class="n">23 columnas</span>
+    <span class="marcas"><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">El kardex. Solo se inserta; nunca se edita ni se borra.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">tipo</td><td class="t">tipo_mov</td><td class="m">obl.</td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">item_nombre</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">cantidad</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">saldo</td><td class="t">numeric(14,3)</td><td class="m"></td></tr><tr><td class="c">persona</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">persona_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">area</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">documento</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">requerimiento_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">recepcion_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto1_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto2_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">firma_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">usuario_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">usuario_nombre</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">anula_a</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>prestamos</b>
+    <span class="n">28 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">Salida y retorno de cada herramienta, con sus días de atraso.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">herramienta_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">personal_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">responsable</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">dni</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">celular</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">area</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">salida</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">devolucion_pactada</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">retorno</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">dias_fuera</td><td class="t">int</td><td class="m"></td></tr><tr><td class="c">retraso_dias</td><td class="t">int</td><td class="m"></td></tr><tr><td class="c">estado_retorno</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">marca</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">modelo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">serie</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto_salida_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto_retorno_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">sin_foto</td><td class="t">boolean</td><td class="m">obl.</td></tr><tr><td class="c">obs</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">avisado_en</td><td class="t">date</td><td class="m"></td></tr><tr><td class="c">entregado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">recibido_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>entregas</b>
+    <span class="n">15 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span></span>
+  </summary>
+  <p class="desc">Los vales de entrega al frente.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">requerimiento_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">recibe</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">personal_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">area</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">frente</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">firma_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">foto_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">tipo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">entregado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>entrega_lineas</b>
+    <span class="n">8 columnas</span>
+    <span class="marcas"><span class="chip alerta">1 validación</span></span>
+  </summary>
+  <p class="desc">Qué llevó cada vale.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">entrega_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">descripcion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">unidad</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">cantidad</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">movimiento_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>epp_entregas</b>
+    <span class="n">16 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span></span>
+  </summary>
+  <p class="desc">Qué EPP recibió cada trabajador.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">personal_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">trabajador</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">dni</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">material_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">descripcion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">cantidad</td><td class="t">numeric(14,3)</td><td class="m">obl.</td></tr><tr><td class="c">talla</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">motivo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">firma_url</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">entregado_por</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details></div><h3>Avisos y rastro</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>notificaciones</b>
+    <span class="n">13 columnas</span>
+    <span class="marcas"><span class="chip ok">lápida</span><span class="chip info">versión</span><span class="chip vivo">tiempo real</span></span>
+  </summary>
+  <p class="desc">Los avisos, dirigidos por cargo o por nombre.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">titulo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">cuerpo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">roles</td><td class="t">rol_app[]</td><td class="m">obl.</td></tr><tr><td class="c">usuarios</td><td class="t">uuid[]</td><td class="m">obl.</td></tr><tr><td class="c">ref_tipo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">ref_id</td><td class="t">uuid</td><td class="m"></td></tr><tr><td class="c">prioridad</td><td class="t">prioridad_req</td><td class="m"></td></tr><tr><td class="c">emisor_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">eliminado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">version</td><td class="t">bigint</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>notificaciones_leidas</b>
+    <span class="n">3 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">Quién ya leyó cada aviso.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">notificacion_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">usuario_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">leida_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>historial</b>
+    <span class="n">8 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">La bitácora de la app.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">modulo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">accion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">detalle</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">ref_id</td><td class="t">uuid</td><td class="m"></td></tr><tr><td class="c">usuario_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">usuario_nombre</td><td class="t">text</td><td class="m"></td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>auditoria</b>
+    <span class="n">14 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">El antes y el después de cada cambio. Nadie la puede borrar.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">fecha</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">usuario_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">usuario_nombre</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">cargo</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">modulo</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">accion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">tabla</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">fila_id</td><td class="t">uuid</td><td class="m"></td></tr><tr><td class="c">estado_anterior</td><td class="t">jsonb</td><td class="m"></td></tr><tr><td class="c">estado_nuevo</td><td class="t">jsonb</td><td class="m"></td></tr><tr><td class="c">comentario</td><td class="t">text</td><td class="m"></td></tr><tr><td class="c">ip</td><td class="t">inet</td><td class="m"></td></tr><tr><td class="c">dispositivo</td><td class="t">text</td><td class="m"></td></tr></tbody></table></div>
+</details></div><h3>Sistema</h3><div class="grupo">
+<details class="tabla">
+  <summary>
+    <b>correlativos</b>
+    <span class="n">4 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">Los números de MAT, HER, REQ y de guía. Los da la base.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">prefijo</td><td class="t">text</td><td class="m">PK</td></tr><tr><td class="c">valor</td><td class="t">bigint</td><td class="m">obl.</td></tr><tr><td class="c">formato</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>configuracion</b>
+    <span class="n">4 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">Ajustes de la obra: datos de la guía, correos, logo.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">clave</td><td class="t">text</td><td class="m">PK</td></tr><tr><td class="c">valor</td><td class="t">jsonb</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">actualizado_por</td><td class="t">uuid</td><td class="m">FK</td></tr></tbody></table></div>
+</details>
+<details class="tabla">
+  <summary>
+    <b>sync_pendientes</b>
+    <span class="n">9 columnas</span>
+    <span class="marcas"></span>
+  </summary>
+  <p class="desc">Lo que se hizo sin señal y todavía no subió.</p>
+  <div class="scroll"><table class="cols"><tbody><tr><td class="c">id</td><td class="t">uuid</td><td class="m">PK</td></tr><tr><td class="c">idempotencia</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">usuario_id</td><td class="t">uuid</td><td class="m">FK</td></tr><tr><td class="c">tabla</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">operacion</td><td class="t">text</td><td class="m">obl.</td></tr><tr><td class="c">carga</td><td class="t">jsonb</td><td class="m">obl.</td></tr><tr><td class="c">creado_en</td><td class="t">timestamptz</td><td class="m">obl.</td></tr><tr><td class="c">aplicado_en</td><td class="t">timestamptz</td><td class="m"></td></tr><tr><td class="c">error</td><td class="t">text</td><td class="m"></td></tr></tbody></table></div>
+</details></div>
+
+<h2>Los archivos, en orden</h2>
+<div class="archivos">
+  <div class="arch"><span class="orden">1</span><span><b>01_esquema.sql</b><br><small>Tablas, tipos, claves e índices. Incluye la envoltura de unaccent para que «válvula» y «valvula» sean lo mismo.</small></span></div>
+  <div class="arch"><span class="orden">2</span><span><b>02_triggers.sql</b><br><small>Sello de cambio, lápidas, suma atómica, correlativos, el filtro de Obra y los avisos que salen solos.</small></span></div>
+  <div class="arch"><span class="orden">3</span><span><b>03_seguridad_rls.sql</b><br><small>Permisos por cargo dentro de la base. Si un capataz pide los movimientos, Postgres le devuelve cero filas.</small></span></div>
+  <div class="arch"><span class="orden">4</span><span><b>04_realtime.sql</b><br><small>Qué se transmite en vivo, cómo se traen solo los cambios, qué pasa ante un choque y las tareas de reloj.</small></span></div>
+  <div class="arch"><span class="orden">5</span><span><b>05_datos_iniciales.sql</b><br><small>Sus datos de hoy: 8 usuarios, 5 del personal, 142 materiales, 8 herramientas y los 445 renglones del consolidado.</small></span></div>
+</div>
+
+<h2>Lo que falta decidir</h2>
+<p>Tres cosas que no se resuelven en el SQL y hay que acordar antes de subir esto a producción.</p>
+<div class="nota"><b>Las fotos.</b> Hoy viven dentro del registro, como texto, y pesan más que
+todos los datos juntos. En la base van a un bucket aparte y en la tabla queda solo la dirección.
+Hay que decidir cuánto tiempo se guardan.</div>
+<div class="nota"><b>Las contraseñas.</b> La app las guarda con su propio sal y hash. Al pasar a
+Supabase conviene que el acceso lo maneje su servicio de autenticación, con el fotocheck como
+identificador. Eso implica que cada uno vuelva a establecer su contraseña una vez.</div>
+<div class="nota"><b>Quién paga y quién administra.</b> Una base con tiempo real es un servicio
+mensual. Hay que definir quién es el dueño de la cuenta, porque de eso depende quién puede
+apagarla.</div>
+
+<footer>
+  Generado a partir de la aplicación Almacén Minero. Los datos iniciales salen de la copia del
+  12 de agosto de 2026. El documento que la app genera al despachar no reemplaza a la guía de
+  remisión electrónica de la SUNAT.
+</footer>
+</div>
+
+</body>
+</html>

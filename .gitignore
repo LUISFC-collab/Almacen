@@ -1,0 +1,5 @@
+node_modules/
+.DS_Store
+__MACOSX/
+sql/local/
+sql/base-relacional/05_datos_iniciales.sql
