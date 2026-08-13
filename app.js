@@ -13245,3 +13245,66 @@ ir = function(){ const r = irV69.apply(this, arguments); pintarBotonLateralV69()
       });
   };
 })();
+
+/* ---------------------------------------------------------------
+   V72  Que las descargas bajen de verdad
+
+   "Descargar plantilla" avisaba que descargaba y no descargaba nada.
+
+   La causa está en `descargarBlob`, que arma un enlace y le hace click
+   sin haberlo puesto nunca en la página. Un enlace suelto —que no está
+   en el documento— lo ignoran varios navegadores, y otros lo respetan
+   solo a veces: por eso a mí me funcionaba probándolo y a la obra no.
+   No hay error en consola; simplemente no pasa nada.
+
+   El arreglo va en `descargarBlob` y no solo en la plantilla, porque de
+   ahí salen TODAS las descargas de la app: los reportes, el kardex, el
+   consolidado, el respaldo. Todas tenían el mismo problema latente.
+
+   Además queda una salida por si el navegador igual la bloquea (pasa
+   dentro de la app instalada en el celular): se abre el archivo en una
+   pestaña, donde se puede guardar a mano. Vale más eso que un botón que
+   no hace nada.
+   --------------------------------------------------------------- */
+(function descargasFirmesV72(){
+  if(typeof descargarBlob !== "function") return;
+
+  window.descargarBlob = function(nombre, blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = nombre;
+    a.rel = "noopener";
+    a.style.display = "none";
+    /* EN la página: un enlace suelto no dispara la descarga */
+    document.body.appendChild(a);
+    try{
+      a.click();
+    }catch(e){
+      window.open(url, "_blank");
+    }
+    setTimeout(function(){
+      if(a.parentNode) a.parentNode.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 4000);
+    return url;
+  };
+
+  /* Para la plantilla, además, una salida si el navegador la bloquea:
+     el formato es público, así que abrirlo en una pestaña alcanza para
+     guardarlo. Se ofrece solo si al soltar el click no pasó nada. */
+  if(typeof plantillaRequerimiento === "function"){
+    var bajarV72 = plantillaRequerimiento;
+    plantillaRequerimiento = function(){
+      var r = bajarV72.apply(this, arguments);
+      var b = document.getElementById("mr-importe");
+      if(b){
+        b.className = "ayuda";
+        b.innerHTML = 'Si no aparece el archivo, <a href="' + FORMATO_REQ_V54 +
+          '" target="_blank" rel="noopener" style="color:var(--pri);font-weight:600">' +
+          "ábralo acá</a> y guárdelo.";
+      }
+      return r;
+    };
+  }
+})();
