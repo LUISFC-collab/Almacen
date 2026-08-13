@@ -13402,6 +13402,11 @@ importarPedido = function(filas){
     }
   }catch(e){ console.warn("[import] columnas extra:", e); }
 
+  /* El importador original ya pintó la tabla ANTES de que este paso
+     completara solicitante y lugar, así que hay que volver a pintarla:
+     si no, el dato entra al pedido pero la pantalla lo muestra vacío. */
+  try{ pintarItemsReq(); }catch(e){}
+
   /* Una fila que solo trae su número de orden está vacía, no omitida */
   return res;
 };
@@ -13550,6 +13555,111 @@ abrirRequerimiento = function(){
     if(b) b.textContent = "Enviar";
   });
 })();
+
+/* ---------------------------------------------------------------
+   V66  La tabla, con todos los puntos de la planilla
+
+   Faltaban cuatro columnas del formato oficial: el N° de orden, ENTREGA
+   PARCIAL, ENTREGA TOTAL y AUTORIZADO. Las dejé afuera a propósito
+   —las llenan el almacén y Logística después, no quien pide— pero el
+   pedido es que la pantalla sea la planilla, así que van todas y en el
+   mismo orden que el papel:
+
+     N° · DESCRIPCIÓN · UND · SOLICITADA · ENTREGA PARCIAL ·
+     ENTREGA TOTAL · SOLICITANTE · LUGAR/FRENTE · AUTORIZADO ·
+     OBSERVACIONES
+
+   Las tres de después van en gris y sin marco: se pueden escribir, pero
+   se ve de un vistazo que no son de este momento. El N° no se escribe,
+   se cuenta solo — si fuera un campo, alguien lo dejaría en blanco o
+   repetido y la fila perdería su orden.
+
+   Diez columnas no entran en ninguna pantalla: la tabla se desplaza de
+   costado, que es como se lee el papel cuando es ancho.
+   --------------------------------------------------------------- */
+COLS_REQ_V49.splice(0, COLS_REQ_V49.length,
+  {k:"desc",           t:"Descripción",     c:"c-desc", tipo:"text"},
+  {k:"unidad",         t:"Und.",            c:"c-und",  tipo:"text"},
+  {k:"cant",           t:"Solicitada",      c:"c-cant", tipo:"number"},
+  {k:"entregaParcial", t:"Entrega parcial", c:"c-ent",  tipo:"number", despues:true},
+  {k:"entregaTotal",   t:"Entrega total",   c:"c-ent",  tipo:"number", despues:true},
+  {k:"solicitante",    t:"Solicitante",     c:"c-sol",  tipo:"text"},
+  {k:"lugar",          t:"Lugar / frente",  c:"c-lug",  tipo:"text"},
+  {k:"autorizado",     t:"Autorizado",      c:"c-aut",  tipo:"text",   despues:true},
+  {k:"obs",            t:"Observaciones",   c:"c-obs",  tipo:"text"}
+);
+
+(function estilosV66(){
+  if($("estilos-v66")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v66";
+  s.textContent =
+    ".tabla-req table{min-width:1120px}" +
+    ".tabla-req .c-num{width:44px;text-align:center;color:var(--tinta-sec);font-size:12.5px;" +
+      "font-variant-numeric:tabular-nums}" +
+    ".tabla-req .c-ent{width:104px}.tabla-req .c-aut{width:112px}" +
+    /* lo que se llena después: se distingue sin quedar bloqueado */
+    ".tabla-req td.despues-v66{background:var(--cajon)}" +
+    ".tabla-req td.despues-v66 input{color:var(--tinta-sec)}" +
+    ".tabla-req th.despues-v66{background:var(--cajon-hondo);font-style:italic}";
+  document.head.appendChild(s);
+})();
+
+/* Se rehace el pintado para meter el N°, que no es un campo sino la
+   posición de la fila, y para marcar las columnas de después. */
+pintarTablaReqV49 = function(){
+  const cont = $("mr-items");
+  if(!cont) return;
+
+  const cab = '<tr><th class="c-num">N°</th>' + COLS_REQ_V49.map(c =>
+      '<th class="' + c.c + (c.despues ? " despues-v66" : "") + '">' + c.t + "</th>").join("") +
+    '<th class="c-quita"></th></tr>';
+
+  const cuerpo = itemsReq.length
+    ? itemsReq.map((it, i) =>
+        '<tr><td class="c-num">' + (i + 1) + "</td>" +
+        COLS_REQ_V49.map(c =>
+          '<td class="' + c.c + (c.despues ? " despues-v66" : "") + '"><input type="' + c.tipo + '"' +
+          (c.tipo === "number" ? ' min="0" step="0.01" inputmode="decimal"' : "") +
+          ' data-campo="' + c.k + '" data-fila="' + i + '" value="' +
+          esc(String(it[c.k] === undefined || it[c.k] === null ? "" : it[c.k])) + '"' +
+          (c.k === "desc" ? ' placeholder="Qué material necesita"' : "") +
+          (c.despues ? ' title="Lo llenan el almacén y Logística al entregar"' : "") +
+          "></td>").join("") +
+        '<td class="c-quita"><button type="button" class="quita-fila" data-quitaritem="' + i +
+        '" aria-label="Quitar esta línea" title="Quitar">✕</button></td></tr>').join("")
+    : '<tr class="sin-filas"><td colspan="' + (COLS_REQ_V49.length + 2) + '">' +
+      "Suba la planilla o toque el + para agregar un material.</td></tr>";
+
+  cont.innerHTML = '<div class="tabla-req"><table><thead>' + cab +
+                   "</thead><tbody>" + cuerpo + "</tbody></table></div>";
+
+  /* Se escribe directo sobre el arreglo y NO se repinta: repintar en cada
+     tecla le sacaría el foco al campo y cerraría el teclado del celular. */
+  $$("#mr-items input[data-campo]").forEach(inp => {
+    inp.addEventListener("input", ()=>{
+      const it = itemsReq[+inp.dataset.fila];
+      if(!it) return;
+      const k = inp.dataset.campo;
+      it[k] = k === "cant" ? Math.max(0.01, num(inp.value) || 0.01)
+            : (k === "entregaParcial" || k === "entregaTotal")
+              ? (inp.value === "" ? "" : num(inp.value))
+              : inp.value;
+    });
+  });
+
+  $$("#mr-items [data-quitaritem]").forEach(b => b.addEventListener("click", ()=>{
+    itemsReq.splice(+b.dataset.quitaritem, 1);
+    pintarItemsReq();
+  }));
+};
+
+/* Y que el archivo también traiga esas tres, si vienen llenas */
+COLS_PEDIDO.push(
+  {clave:"entregaParcial", alias:["entrega parcial","parcial"]},
+  {clave:"entregaTotal",   alias:["entrega total","total"]},
+  {clave:"autorizado",     alias:["autorizado","autoriza","vb","visto bueno"]}
+);
 
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
