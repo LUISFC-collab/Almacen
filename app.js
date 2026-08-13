@@ -13185,3 +13185,63 @@ ir = function(){ const r = irV69.apply(this, arguments); pintarBotonLateralV69()
     return generarSimple.apply(this, arguments);
   };
 })();
+
+/* ---------------------------------------------------------------
+   V71  "Observado", para cuando algo está mal
+
+   Faltaba la salida para el caso feo: el pedido llegó incompleto, vino
+   otro material, la factura no cuadra. Sin ese botón, quien lo detecta
+   lo marca "Otro" y escribe el problema ahí — y entonces "Otro" mezcla
+   avisos buenos ("va en camino") con problemas, y nadie puede filtrar
+   los pedidos que necesitan que alguien intervenga.
+
+   Va en rojo medio, no en el rojo fuerte de borrar: es un aviso, no una
+   destrucción. Y pide escribir qué se observó, porque un pedido marcado
+   como observado sin decir por qué obliga a llamar para averiguarlo,
+   que es justo lo que estos estados vinieron a evitar.
+
+   El estado `observado` ya existía en la app desde antes y cuenta como
+   pedido en curso: no cierra nada, avisa.
+   --------------------------------------------------------------- */
+(function observadoV71(){
+  if(typeof AVANCE_V60 === "undefined") return;
+  if(AVANCE_V60.some(function(o){ return o.e === "observado"; })) return;
+
+  AVANCE_V60.push({e:"observado", ic:"alerta", t:"Observado",
+                   d:"Algo está mal con este pedido"});
+
+  var s = document.createElement("style");
+  s.id = "estilos-v71";
+  s.textContent =
+    '.avance-op[data-avance="observado"]{border-color:#e8a3a0;color:#b42318;' +
+      "background:#fdf3f2}" +
+    '.avance-op[data-avance="observado"]:hover{background:#fbe9e7}' +
+    '.avance-op[data-avance="observado"].on{background:#b42318;border-color:#b42318;color:#fff}';
+  document.head.appendChild(s);
+
+  /* Observado pide el motivo, igual que "Otro": marcarlo sin decir qué
+     pasa obliga a llamar para averiguarlo. */
+  var marcarSinObservado = marcarAvanceV60;
+  marcarAvanceV60 = function(id, estado){
+    if(estado !== "observado") return marcarSinObservado.apply(this, arguments);
+
+    var r = db.requerimientos.find(function(x){ return x.id === id; });
+    if(!r) return;
+    pedirTexto("¿Qué se observó?", "Por ejemplo: llegaron 8 de 24, el resto sin fecha")
+      .then(function(txt){
+        if(txt == null || !String(txt).trim()) return;
+        var nota = String(txt).trim();
+        historia(r, "observado", nota);
+        r.avanceNota = nota;
+        log("pedidos", "Pedido observado", r.codigo + " · " + nota, r.id);
+        notificar({roles:["compras","jefatura","admin"], usuarios:[r.solicitanteId],
+          titulo:"Pedido observado: " + r.codigo,
+          cuerpo:nota + "\nObservado por " + usuarioActual().nombre + ".",
+          refTipo:"requerimiento", refId:r.id, prioridad:"Alta"});
+        if(!guardar()) return;
+        snack("Pedido marcado como observado.", "");
+        cerrarHoja();
+        refrescar(pantalla);
+      });
+  };
+})();
