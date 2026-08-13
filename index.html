@@ -8,37 +8,75 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="estilos.css">
+<script src="config.js"></script>
 </head>
 <body>
+
 <!-- =====================================================================
-     Este archivo ya no es la app: es el que reparte.
+     La app entra por acá y la dirección se queda en /Almacen/ — sin nada
+     colgando al final.
 
-     Mira con qué equipo se entra y manda a la pantalla que corresponde.
-     No mira el "user agent" —esa cadena miente y cada modelo nuevo rompe
-     la lista— sino si hay mouse, si la pantalla se toca y cuánto mide la
-     ventana, que es lo único que importa de verdad.
+     Antes esto mandaba a computadora.html o a celular.html y la dirección
+     quedaba con el .html a la vista. Ahora no se va a ningún lado: se
+     carga el motor, se mira con qué equipo se entró, y se trae SOLO el
+     archivo de ese equipo.
 
-     Quien quiera entrar a una a propósito puede ir directo:
-       computadora.html   ·   celular.html
+     Los dos archivos de equipo siguen separados, que era lo importante:
+     se toca el diseño de computadora sin rozar el del celular.
      ===================================================================== -->
+
+<!-- Las pantallas y los modales, iguales en los dos equipos -->
+<script src="pantallas.js"></script>
+
+<!-- El motor: toda la lógica. Se arregla una vez y sirve para los dos -->
+<script src="app.js"></script>
+
+<!-- Conversor de HEIC (las fotos del iPhone). Va antes de fotos.js -->
+<script src="heic2any.min.js"></script>
+<script src="fotos.js"></script>
+
+<!-- La sincronización entre equipos -->
+<script src="sync.js"></script>
+
 <script>
-(function repartir(){
+/* =====================================================================
+   Qué equipo es, y qué archivo se trae
+
+   No se mira el "user agent": esa cadena miente —Chrome dice ser Safari,
+   el iPad dice ser Mac— y cada modelo nuevo que sale rompe la lista. Se
+   mira si hay mouse, si la pantalla se toca y cuánto mide la ventana,
+   que es lo único que de verdad distingue una laptop de un teléfono.
+
+   Para probar la otra vista sin cambiar de equipo:
+     ?equipo=computadora   ·   ?equipo=celular
+   ===================================================================== */
+(function traerElDeEsteEquipo(){
+  var pedido = (location.search.match(/[?&]equipo=(computadora|celular|tablet)/) || [])[1];
+
   var mq = function(q){ return window.matchMedia && window.matchMedia(q).matches; };
   var hayMouse = mq("(any-pointer: fine)") || mq("(any-hover: hover)");
   var ancho = window.innerWidth || document.documentElement.clientWidth;
-  var destino = (ancho >= 980 && hayMouse) ? "computadora.html" : "celular.html";
+  var equipo = pedido || ((ancho >= 980 && hayMouse) ? "computadora" : "celular");
 
-  /* replace y no href: así el botón "atrás" del navegador no devuelve
-     a esta página en blanco una y otra vez. */
-  location.replace(destino + location.search + location.hash);
+  /* La tablet con teclado se trabaja como computadora; sin él, como
+     teléfono. Es lo que hace la persona con ella, no lo que dice ser. */
+  var archivo = (equipo === "computadora") ? "computadora.js" : "celular.js";
+
+  document.body.setAttribute("data-equipo", equipo);
+
+  var s = document.createElement("script");
+  s.src = archivo;
+  s.async = false;          /* que corra después del motor, no antes */
+  document.body.appendChild(s);
+
+  /* Guarda la app en el equipo para que abra sin señal. */
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
 })();
 </script>
-<noscript>
-  <p style="font:16px system-ui;padding:24px">
-    Esta aplicación necesita JavaScript.
-    <a href="computadora.html">Abrir la versión de computadora</a> ·
-    <a href="celular.html">Abrir la versión de celular</a>
-  </p>
-</noscript>
 </body>
 </html>
