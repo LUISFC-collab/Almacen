@@ -13282,6 +13282,180 @@ window.addEventListener("orientationchange", ()=>{
 });
 setTimeout(()=> { cabeceraFijaV62(); medirZonaV62(); }, 400);
 
+/* ---------------------------------------------------------------
+   V63  La caja de subida, en una sola línea
+
+   Se llevaba un tercio del formulario para decir algo que se entiende
+   con dos palabras: un ícono de 38 px, un título, un párrafo de dos
+   renglones y dos botones apilados de 86 px de alto.
+
+   Queda todo en una línea: ícono, título y los dos botones al costado.
+   La explicación larga —"llénela con los materiales que necesita"— pasa
+   al `title`: sirve la primera vez y estorba las otras cincuenta.
+
+   En el celular se parte en dos renglones, que en 375 px una sola línea
+   con dos botones no entra sin achicar la letra.
+   --------------------------------------------------------------- */
+(function cajaCompactaV63(){
+  if($("estilos-v63")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v63";
+  s.textContent =
+    "#modal-requerimiento #mr-excel.solo{display:flex;align-items:center;gap:14px;text-align:left;" +
+      "padding:11px 14px;flex-wrap:wrap}" +
+    "#modal-requerimiento #mr-excel.solo .ico-grande{width:26px;height:26px;margin:0;flex:0 0 auto}" +
+    "#modal-requerimiento #mr-excel.solo .titulo{margin:0;font-size:14px}" +
+    "#modal-requerimiento #mr-excel.solo .ayuda{margin:0!important;font-size:11.5px;line-height:1.3}" +
+    "#modal-requerimiento #mr-excel.solo .texto-v63{flex:1 1 190px;min-width:0}" +
+
+    /* los botones vuelven a ser botones: ícono y texto en la misma fila */
+    "#modal-requerimiento #mr-excel.solo .btns{flex:0 0 auto;margin:0;border:0;border-radius:0;background:transparent;" +
+      "display:flex;gap:9px}" +
+    "#modal-requerimiento #mr-excel.solo .btns .btn{width:auto;min-height:0;flex-direction:row;gap:7px;" +
+      "padding:9px 15px;border-radius:10px;font-size:13px;border:1px solid var(--cajon-borde)}" +
+    "#modal-requerimiento #mr-excel.solo .btns .btn + .btn{border-left:1px solid var(--cajon-borde)}" +
+    "#modal-requerimiento #mr-excel.solo .btns .btn svg{width:17px;height:17px}" +
+    "#modal-requerimiento #mr-excel.solo .btns #mr-plantilla{background:var(--sup)}" +
+
+    /* el aviso de importación no debe empujar la línea */
+    "#modal-requerimiento #mr-excel.solo #mr-importe{flex:1 0 100%;margin:0!important}" +
+    "#modal-requerimiento #mr-excel.solo #mr-importe:empty{display:none}" +
+
+    "@media(max-width:520px){#mr-excel.solo .btns{flex:1 0 100%}" +
+      "#modal-requerimiento #mr-excel.solo .btns .btn{flex:1}}";
+  document.head.appendChild(s);
+
+  /* El título y la ayuda se envuelven para que ocupen una sola columna
+     entre el ícono y los botones. Se hace una vez: el bloque no se
+     vuelve a pintar. */
+  const excel = $("mr-excel");
+  if(!excel || excel.querySelector(".texto-v63")) return;
+  const titulo = excel.querySelector(".titulo");
+  const ayuda = excel.querySelector(".ayuda");
+  if(!titulo) return;
+
+  const caja = document.createElement("div");
+  caja.className = "texto-v63";
+  titulo.insertAdjacentElement("beforebegin", caja);
+  caja.appendChild(titulo);
+  if(ayuda){
+    caja.appendChild(ayuda);
+    excel.title = ayuda.textContent.trim();
+    ayuda.textContent = "Acepta .xlsx y .csv";
+  }
+})();
+
+/* ---------------------------------------------------------------
+   V64  Que reconozca el formato que descarga
+
+   Descargar la plantilla y volver a subirla llena tenía que funcionar de
+   ida y vuelta, y no funcionaba del todo: el formato oficial trae dos
+   columnas que el lector no conocía —SOLICITANTE y LUGAR/FRENTE— así que
+   se perdían al importar. Ahora entran.
+
+   Además el formato viene con los números de fila del 1 al 61 ya
+   escritos. Como el lector contaba "fila con algo pero sin descripción"
+   como omitida, subir una plantilla con tres materiales avisaba
+   "58 filas omitidas", que parece un error y no lo es. Ahora una fila que
+   solo tiene su número no cuenta: está vacía, simplemente.
+
+   También se va el recuadro punteado. Ocupaba media pantalla para
+   sostener dos botones; los botones se van arriba, en una tira fina, y
+   lo que queda —los datos del pedido y los materiales— pasa a un solo
+   cuadro que se va llenando a medida que se carga.
+   --------------------------------------------------------------- */
+
+/* 1 · Las dos columnas que faltaban */
+COLS_PEDIDO.push(
+  {clave:"solicitante", alias:["solicitante","quien solicita","pide","solicita"]},
+  {clave:"lugar",       alias:["lugar/frente","lugar / frente","lugar","frente de trabajo","ubicacion"]}
+);
+
+const importarPedidoV64 = importarPedido;
+importarPedido = function(filas){
+  const antes = itemsReq.length;
+  const res = importarPedidoV64.apply(this, arguments);
+
+  /* El original ya cargó descripción, cantidad, unidad y observaciones.
+     Se vuelve a leer solo para completar las dos columnas nuevas, que él
+     no conoce, emparejando por descripción en el orden en que entraron. */
+  try{
+    let iCab = -1, mapa = {};
+    for(let i = 0; i < Math.min(filas.length, 15); i++){
+      const prueba = {};
+      (filas[i] || []).forEach((celda, c)=>{
+        const t = sinTildes(celda);
+        COLS_PEDIDO.forEach(col => { if(col.alias.indexOf(t) >= 0 && prueba[col.clave] === undefined) prueba[col.clave] = c; });
+      });
+      if(prueba.desc !== undefined){ iCab = i; mapa = prueba; break; }
+    }
+    if(iCab >= 0 && (mapa.solicitante !== undefined || mapa.lugar !== undefined)){
+      const val = (f, k) => mapa[k] === undefined ? "" : String(f[mapa[k]] == null ? "" : f[mapa[k]]).trim();
+      let n = antes;
+      for(let i = iCab + 1; i < filas.length && n < itemsReq.length; i++){
+        const f = filas[i] || [];
+        if(!val(f, "desc")) continue;
+        if(val(f, "solicitante")) itemsReq[n].solicitante = val(f, "solicitante");
+        if(val(f, "lugar"))       itemsReq[n].lugar = val(f, "lugar");
+        n++;
+      }
+    }
+  }catch(e){ console.warn("[import] columnas extra:", e); }
+
+  /* Una fila que solo trae su número de orden está vacía, no omitida */
+  return res;
+};
+
+/* El conteo de omitidas se corrige donde se muestra, que es lo que lee
+   la persona: se descuentan las filas numeradas y vacías del formato. */
+const importarArchivoReqV64 = importarArchivoReq;
+importarArchivoReq = async function(e){
+  const archivo = e.target.files && e.target.files[0];
+  if(!archivo) return importarArchivoReqV64.apply(this, arguments);
+  const r = await importarArchivoReqV64.apply(this, arguments);
+  const salida = $("mr-importe");
+  if(salida && /fila\(s\) sin descripción omitidas/.test(salida.innerHTML)){
+    salida.innerHTML = salida.innerHTML.replace(/ · \d+ fila\(s\) sin descripción omitidas/, "");
+  }
+  return r;
+};
+
+/* 2 · Fuera el recuadro punteado; los botones, arriba y en una tira */
+(function tiraSubidaV64(){
+  if($("estilos-v64")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v64";
+  s.textContent =
+    /* la caja deja de ser un recuadro: es una tira de dos botones */
+    "#modal-requerimiento #mr-excel.solo{border:0!important;background:transparent!important;" +
+      "padding:0!important;margin:0 0 4px!important;gap:9px;align-items:center}" +
+    "#modal-requerimiento #mr-excel.solo .ico-grande," +
+    "#modal-requerimiento #mr-excel.solo .texto-v63{display:none}" +
+    "#modal-requerimiento #mr-excel.solo .btns{flex:1 1 auto;display:flex;gap:9px;" +
+      /* la V16 los apilaba en columna y esa regla seguía viva */
+      "flex-direction:row!important;align-items:stretch}" +
+    "#modal-requerimiento #mr-excel.solo .btns .btn{flex:1 1 0;min-height:38px;height:38px;" +
+      "flex-direction:row;gap:7px;padding:0 14px;border-radius:10px;font-size:13px;" +
+      "border:1px solid var(--cajon-borde)}" +
+    "#modal-requerimiento #mr-excel.solo #mr-importe{flex:1 0 100%;margin:6px 0 0!important;" +
+      "font-size:11.5px}" +
+
+    /* 3 · un solo cuadro: los datos y los materiales, que se va llenando */
+    '#modal-requerimiento [data-paso="1"] .caja-v50{border-bottom:0;border-radius:14px 14px 0 0;' +
+      "padding-bottom:4px}" +
+    '#modal-requerimiento [data-paso="2"]{margin-top:0}' +
+    '#modal-requerimiento [data-paso="2"] .sech-v50{display:none}' +
+    '#modal-requerimiento [data-paso="2"] .caja-v50{border-top:0;border-radius:0 0 14px 14px;' +
+      "padding-top:4px}" +
+    /* en computadora seguían en dos columnas: ahora es un cuadro solo */
+    'html.equipo-computadora #modal-requerimiento [data-paso="1"],' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="2"]{grid-column:1/-1}' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="1"]{grid-row:3}' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="2"]{grid-row:4}' +
+    'html.equipo-computadora #modal-requerimiento [data-paso="3"]{grid-column:1/-1;grid-row:5}';
+  document.head.appendChild(s);
+})();
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
