@@ -1148,3 +1148,158 @@
     };
   }
 })();
+
+/* ---------------------------------------------------------------
+   C12  Pedidos, con el mismo cuadro que la planilla
+
+   La lista era una tira de tarjetas: una debajo de otra, con el código y
+   el primer material. Para comparar dos pedidos había que abrir los dos.
+   Ahora es la misma tabla que se usa al subir el requerimiento — mismo
+   cuadro, mismas líneas, misma cabecera pegada— y se lee de un vistazo:
+   qué número, de qué día, de qué obra, cuántos materiales y en qué anda.
+
+   La columna que se agrega es ESTADO, y es un desplegable: Logística
+   cambia ahí mismo en qué va el pedido sin entrar a cada uno. Antes eso
+   estaba a tres toques de distancia —abrir, buscar el botón, marcar— y
+   con veinte pedidos al día nadie lo hacía.
+
+   Quien no maneja la compra ve el estado, pero como texto: cambiarlo es
+   de Logística.
+
+   El texto va apretado a propósito: son ocho columnas en el ancho que
+   deja el menú, y una tabla que obliga a correr de costado para leer lo
+   básico no sirve de nada.
+   --------------------------------------------------------------- */
+(function pedidosEnTablaC12(){
+  if(typeof pintarPedidos !== "function") return;
+
+  /* Los estados que Logística puede poner desde la lista */
+  var ELEGIBLES = ["solicitado","enviado_logistica","aprobado","comprado","fabricacion",
+                   "empaquetando","enviado","despachado","recibido","observado","rechazado"];
+
+  var s = document.createElement("style");
+  s.id = "estilos-c12";
+  s.textContent = [
+    /* el cuadro, igual que el de la planilla pero más apretado */
+    ".tabla-ped{overflow:auto;border:1px solid var(--cajon-borde);border-radius:12px;",
+      "background:var(--sup)}",
+    ".tabla-ped table{border-collapse:collapse;width:100%;table-layout:fixed}",
+    ".tabla-ped th{position:sticky;top:0;z-index:2;font-size:10px;font-weight:700;",
+      "color:var(--tinta-sec);text-align:left;text-transform:uppercase;letter-spacing:.03em;",
+      "padding:7px 6px;background:var(--cajon-hondo);border-bottom:1px solid var(--cajon-borde);",
+      "white-space:normal;line-height:1.15}",
+    ".tabla-ped td{padding:6px;border-bottom:1px solid var(--cajon-borde);font-size:12.5px;",
+      "vertical-align:top;line-height:1.3}",
+    ".tabla-ped tbody tr:hover{background:var(--cajon)}",
+    ".tabla-ped .num{font-weight:700;color:var(--pri);font-variant-numeric:tabular-nums}",
+    ".tabla-ped .cortar{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".tabla-ped .dos-lineas{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;",
+      "overflow:hidden}",
+    ".tabla-ped .ver{border:0;background:transparent;color:var(--pri);font:inherit;",
+      "font-size:12px;font-weight:600;cursor:pointer;padding:3px 5px;border-radius:7px}",
+    ".tabla-ped .ver:hover{background:var(--pri-cont)}",
+    ".tabla-ped select{width:100%;font:inherit;font-size:11.5px;padding:5px 4px;",
+      "border:1px solid var(--cajon-borde);border-radius:7px;background:var(--sup);cursor:pointer}",
+    ".tabla-ped select:focus{border-color:var(--pri);outline:none}",
+    ".tabla-ped .chip{display:inline-block;font-size:11px;padding:3px 7px;border-radius:999px;",
+      "background:var(--cajon);white-space:nowrap}",
+    ".tabla-ped .vacio-ped{padding:26px;text-align:center;color:var(--tinta-sec);font-size:13px}"
+  ].join("");
+  document.head.appendChild(s);
+
+  function corto(t, n){
+    t = String(t == null ? "" : t);
+    return t.length > n ? t.slice(0, n - 1) + "…" : t;
+  }
+
+  var pintarViejo = pintarPedidos;
+  pintarPedidos = function(){
+    pintarViejo.apply(this, arguments);      /* deja los filtros como están */
+
+    var cont = document.getElementById("pe-lista");
+    if(!cont) return;
+
+    var lista = (typeof misPedidos === "function" ? misPedidos() : [])
+      .filter(function(r){
+        return (!filtroPedidos || r.estado === filtroPedidos) &&
+               (!filtroArea || (r.disciplina || r.area) === filtroArea);
+      });
+
+    var mando = (typeof puede === "function") && (puede("compras") || puede("pedidos.aprobar"));
+
+    if(!lista.length){
+      cont.innerHTML = '<div class="tabla-ped"><div class="vacio-ped">' +
+        "No hay pedidos para lo que está mirando.</div></div>";
+      return;
+    }
+
+    var filas = lista.map(function(r){
+      var n = (typeof numeroDeRequerimiento === "function" ? numeroDeRequerimiento(r) : "") || "—";
+      var est = ESTADOS[r.estado] || {texto:r.estado};
+      var mats = (r.items || []).length;
+      var primero = mats ? (r.items[0].desc || "") : "";
+      var dia = r.diaPedido || diaLocal(r.fecha);
+
+      var celdaEstado = mando
+        ? '<select data-estado-de="' + r.id + '">' + ELEGIBLES.map(function(e){
+            return '<option value="' + e + '"' + (r.estado === e ? " selected" : "") + ">" +
+                   esc((ESTADOS[e] || {texto:e}).texto) + "</option>";
+          }).join("") + "</select>"
+        : '<span class="chip">' + esc(est.texto) + "</span>";
+
+      return "<tr>" +
+        '<td class="num">' + esc(n) + "</td>" +
+        "<td>" + esc(dia.slice(8) + "/" + dia.slice(5,7)) + "</td>" +
+        '<td class="dos-lineas">' + esc(corto(r.obra || "—", 40)) + "</td>" +
+        '<td class="cortar">' + esc(corto(r.disciplina || r.area || "—", 18)) + "</td>" +
+        '<td class="cortar">' + esc(corto(r.solicitante || "—", 20)) + "</td>" +
+        '<td class="dos-lineas">' + mats + (mats ? " · " + esc(corto(primero, 28)) : "") + "</td>" +
+        '<td class="cortar">' + esc(r.prioridad || "—") + "</td>" +
+        "<td>" + celdaEstado + "</td>" +
+        '<td><button type="button" class="ver" data-ver="' + r.id + '">Ver</button></td>' +
+        "</tr>";
+    }).join("");
+
+    cont.innerHTML =
+      '<div class="tabla-ped"><table>' +
+      '<colgroup><col style="width:52px"><col style="width:52px"><col style="width:20%">' +
+      '<col style="width:11%"><col style="width:13%"><col style="width:22%">' +
+      '<col style="width:8%"><col style="width:130px"><col style="width:52px"></colgroup>' +
+      "<thead><tr><th>N°</th><th>Día</th><th>Obra</th><th>Área</th><th>Solicitante</th>" +
+      "<th>Materiales</th><th>Prior.</th><th>Estado</th><th></th></tr></thead>" +
+      "<tbody>" + filas + "</tbody></table></div>";
+
+    Array.prototype.forEach.call(cont.querySelectorAll("[data-ver]"), function(b){
+      b.addEventListener("click", function(){ detalleReq(b.dataset.ver); });
+    });
+
+    /* Logística cambia el estado sin entrar al pedido */
+    Array.prototype.forEach.call(cont.querySelectorAll("[data-estado-de]"), function(sel){
+      sel.addEventListener("change", function(){
+        var r = db.requerimientos.find(function(x){ return x.id === sel.dataset.estadoDe; });
+        if(!r) return;
+        var nuevo = sel.value;
+        historia(r, nuevo, "Cambiado desde la lista");
+        log("pedidos", "Estado del pedido", (r.codigo || "") + " → " + (ESTADOS[nuevo] || {}).texto, r.id);
+        notificar({usuarios:[r.solicitanteId],
+          titulo:"Su pedido: " + (ESTADOS[nuevo] || {}).texto + " · " + (r.codigo || ""),
+          cuerpo:"Marcado por " + usuarioActual().nombre + ".",
+          refTipo:"requerimiento", refId:r.id});
+        if(!guardar()) return;
+        snack("Pedido " + (ESTADOS[nuevo] || {}).texto.toLowerCase() + ".", "ok");
+        pintarPedidos();
+      });
+    });
+
+    /* el cuadro se estira hasta donde llega la pantalla */
+    requestAnimationFrame(function(){
+      var caja = cont.querySelector(".tabla-ped");
+      var scr = document.getElementById("scr-pedidos");
+      if(!caja || !scr) return;
+      caja.style.maxHeight = "none";
+      var libre = Math.floor(scr.getBoundingClientRect().bottom -
+                             caja.getBoundingClientRect().top - 14);
+      caja.style.maxHeight = Math.max(200, libre) + "px";
+    });
+  };
+})();

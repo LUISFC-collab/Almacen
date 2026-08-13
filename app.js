@@ -13461,3 +13461,164 @@ ir = function(){ const r = irV69.apply(this, arguments); pintarBotonLateralV69()
     return r;
   };
 })();
+
+/* ---------------------------------------------------------------
+   V74  El N° de requerimiento lo pone la Administradora
+
+   El número lo inventaba la app —REQ-2026-001, correlativo— y eso no
+   sirve: en la obra el requerimiento YA tiene número antes de entrar
+   acá. Es el que está en el papel, el que Logística busca cuando llama,
+   el que aparece en la orden de compra. Si la app le pone otro, hay dos
+   números para la misma cosa y a la semana nadie sabe cuál citar.
+
+   Ahora lo escribe quien lo sube, y la app hace dos cosas por él:
+
+   · Propone el siguiente libre, para no obligar a recordar en cuál se
+     quedó. Se puede cambiar.
+   · Avisa si ya existe. Dos requerimientos con el mismo número es el
+     error más caro de este flujo: se despacha contra uno creyendo que es
+     el otro. Por eso no se deja enviar, no es solo un aviso.
+
+   Un mismo día puede llevar dos números distintos —pasa cuando se sube
+   uno de mañana y otro de tarde— y eso está bien: el día agrupa, el
+   número identifica.
+   --------------------------------------------------------------- */
+(function numeroDeRequerimientoV74(){
+
+  function numeroDe(r){
+    if(r.numeroReq != null && r.numeroReq !== "") return String(r.numeroReq).trim();
+    /* los viejos, que traen REQ-2026-007, se leen igual */
+    var m = /(\d+)\s*$/.exec(String(r.codigo || ""));
+    return m ? String(+m[1]) : "";
+  }
+  window.numeroDeRequerimiento = numeroDe;
+
+  function usados(){
+    var m = {};
+    (db.requerimientos || []).forEach(function(r){
+      var n = numeroDe(r);
+      if(n) m[n] = r;
+    });
+    return m;
+  }
+
+  function siguienteLibre(){
+    var m = usados(), n = 1;
+    while(m[String(n)]) n++;
+    return String(n);
+  }
+
+  /* El campo, arriba de todo: es lo primero que se llena */
+  function ponerCampo(){
+    if(document.getElementById("mr-numero")) return;
+    var excel = document.getElementById("mr-excel");
+    if(!excel || !excel.parentNode) return;
+
+    var caja = document.createElement("div");
+    caja.id = "mr-numero-caja";
+    caja.innerHTML =
+      '<label for="mr-numero">N° de requerimiento</label>' +
+      '<input type="text" id="mr-numero" inputmode="numeric" autocomplete="off" ' +
+      'placeholder="Ej.: 9" maxlength="12">' +
+      '<span class="aviso" id="mr-numero-aviso"></span>';
+    excel.parentNode.insertBefore(caja, excel);
+
+    var inp = document.getElementById("mr-numero");
+    inp.addEventListener("input", function(){ revisar(); });
+  }
+
+  function revisar(){
+    var inp = document.getElementById("mr-numero");
+    var aviso = document.getElementById("mr-numero-aviso");
+    if(!inp || !aviso) return true;
+    var n = String(inp.value || "").trim();
+    var m = usados();
+
+    if(!n){
+      aviso.textContent = ""; aviso.className = "aviso";
+      inp.classList.remove("mal");
+      return true;
+    }
+    if(m[n]){
+      aviso.textContent = "Ya existe el requerimiento " + n +
+        " (" + (m[n].obra || "sin obra") + ", " + soloFecha(m[n].fecha) + ")";
+      aviso.className = "aviso mal";
+      inp.classList.add("mal");
+      return false;
+    }
+    aviso.textContent = "Libre";
+    aviso.className = "aviso ok";
+    inp.classList.remove("mal");
+    return true;
+  }
+  window.revisarNumeroReqV74 = revisar;
+
+  var abrirV74 = abrirRequerimiento;
+  abrirRequerimiento = function(){
+    var r = abrirV74.apply(this, arguments);
+    ponerCampo();
+    var inp = document.getElementById("mr-numero");
+    if(inp){ inp.value = siguienteLibre(); revisar(); }
+    return r;
+  };
+
+  /* Al importar, si el archivo trae el N° en su cabecera, se respeta:
+     el del papel manda sobre el que propone la app. */
+  if(typeof importarPedido === "function"){
+    var importarV74 = importarPedido;
+    importarPedido = function(filas){
+      var res = importarV74.apply(this, arguments);
+      try{
+        for(var i = 0; i < Math.min(filas.length, 12); i++){
+          var f = filas[i] || [];
+          for(var c = 0; c < f.length; c++){
+            var t = sinTildes(f[c]);
+            if(t === "n" || t === "n°" || t === "nro" || t === "numero"){
+              var v = String(f[c + 1] == null ? "" : f[c + 1]).trim();
+              if(/^\d+$/.test(v)){
+                var inp = document.getElementById("mr-numero");
+                if(inp){ inp.value = v; revisar(); }
+                return res;
+              }
+            }
+          }
+        }
+      }catch(e){}
+      return res;
+    };
+  }
+
+  /* No se envía con un número repetido: es el error que hace que se
+     despache contra el pedido equivocado. */
+  var registrarV74 = registrarRequerimiento;
+  registrarRequerimiento = function(){
+    var inp = document.getElementById("mr-numero");
+    var n = inp ? String(inp.value || "").trim() : "";
+
+    if(!n){
+      snack("Escriba el N° de requerimiento.", "err");
+      if(inp) inp.focus();
+      return;
+    }
+    if(!revisar()){
+      snack("Ya existe el requerimiento " + n + ". Use otro número.", "err");
+      if(inp){ inp.focus(); inp.select(); }
+      return;
+    }
+
+    window.__numeroReqV74 = n;
+    return registrarV74.apply(this, arguments);
+  };
+
+  /* Se le sella el número al pedido recién creado */
+  var historiaV74 = historia;
+  historia = function(r, estado, nota){
+    var res = historiaV74.apply(this, arguments);
+    if(r && !r.numeroReq && window.__numeroReqV74){
+      r.numeroReq = window.__numeroReqV74;
+      r.codigo = "REQ-" + r.numeroReq;
+      window.__numeroReqV74 = null;
+    }
+    return res;
+  };
+})();
