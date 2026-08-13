@@ -12076,6 +12076,154 @@ cambiarEstadoReq = function(id, estado){
   document.head.appendChild(s);
 })();
 
+/* ---------------------------------------------------------------
+   V48  Quién soy, arriba y sin rodeos
+
+   La tarjeta de inicio abría con "Buenas noches" y recién debajo el
+   nombre. El saludo ocupa la línea de arriba —la que primero se lee—
+   para decir algo que ya se sabe.
+
+   Y la barra de arriba, que es lo único que se ve desde cualquier
+   pantalla, mostraba el cargo pero no el nombre. Cuando el
+   administrador anda cambiando de cargo para revisar cómo ve la app
+   cada uno, saber con qué identidad está trabajando importa más que
+   la hora del día.
+
+   Queda: primero el nombre, después el puesto, en la tarjeta y en la
+   barra. Y el botón de cambiar de cargo también arriba, para no tener
+   que volver a Inicio cada vez.
+   --------------------------------------------------------------- */
+(function estilosV48(){
+  if($("estilos-v48")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v48";
+  s.textContent =
+    /* el nombre pasa a ser la línea principal de la tarjeta */
+    "#ini-saludo .nombre-v48{font-size:19px;font-weight:600;line-height:1.15}" +
+    "#ini-saludo .cargo-v48{font-size:12.5px;color:var(--tinta-sec);margin-top:1px}" +
+    /* en la barra, nombre y cargo entran en la línea del subtítulo */
+    "#appbar .tit small#subtitulo{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}" +
+    "#btn-simular-barra{flex:0 0 auto}";
+  document.head.appendChild(s);
+})();
+
+function sinSaludoV48(){
+  const caja = $("ini-saludo");
+  if(!caja) return;
+  const fila = caja.firstElementChild;
+  const datos = fila && fila.lastElementChild;
+  if(!datos || datos === fila) return;
+
+  /* Se quita solo si de verdad es el saludo: si algún día se cambia el
+     orden, esto no se lleva por delante el nombre. */
+  const primero = datos.firstElementChild;
+  if(primero && primero.textContent.trim() === saludo().trim()) primero.remove();
+
+  const nombre = datos.firstElementChild;
+  if(nombre) nombre.className = "nombre-v48";
+  const cargo = nombre && nombre.nextElementSibling;
+  if(cargo && cargo.tagName !== "BUTTON") cargo.className = "cargo-v48";
+}
+
+function cabeceraArribaV48(){
+  const u = usuarioActual();
+  if(!u) return;
+
+  /* Nombre primero, puesto después — el mismo orden que abajo. */
+  const sub = $("subtitulo");
+  if(sub){
+    const cargo = ROLES[rolEfectivo()];
+    sub.textContent = u.nombre + (cargo ? " · " + cargo.nombre : "");
+  }
+
+  /* El botón de cambiar de cargo, al lado del de modo. Se rige por las
+     mismas condiciones que el de la tarjeta: es gobierno de la app. */
+  const modo = $("btn-modo");
+  const puedeSimular = u.esAdmin && !simulando() && esModoAdmin();
+  let b = $("btn-simular-barra");
+
+  if(!puedeSimular || !modo){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement("button");
+    b.id = "btn-simular-barra";
+    b.className = "icon-btn";
+    b.setAttribute("aria-label", "Ver la app como otro cargo");
+    b.title = "Ver la app como otro cargo";
+    b.innerHTML = ico("cambiar", 20);
+    b.addEventListener("click", ()=> abrirSimulacion());
+    modo.insertAdjacentElement("beforebegin", b);
+  }
+}
+
+const pintarInicioV48 = pintarInicio;
+pintarInicio = function(){ pintarInicioV48(); sinSaludoV48(); cabeceraArribaV48(); };
+
+const aplicarRolV48 = aplicarRol;
+aplicarRol = function(){ aplicarRolV48(); cabeceraArribaV48(); };
+
+/* ---------------------------------------------------------------
+   V48b  Fuera el botón de menú
+
+   Eran dos controles para el mismo panel: el de la izquierda lo abría
+   con las secciones y el avatar con el perfil. Se va el de la
+   izquierda.
+
+   OJO — el panel de secciones era la ÚNICA forma de llegar a
+   Consolidado y a Más: no hay barra inferior y las tarjetas de Inicio
+   no los cubren. Quitando el botón sin más, esas pantallas quedaban
+   sin camino. Así que el avatar pasa a abrir el panel completo:
+   primero las secciones, después el perfil.
+   --------------------------------------------------------------- */
+(function menuFueraV48(){
+  const m = $("btn-menu");
+  if(m) m.remove();
+
+  /* Se reemplaza el nodo para soltar el enganche anterior (abría en
+     modo perfil) sin dejar dos escuchas peleando. */
+  const a = $("btn-perfil");
+  if(!a) return;
+  const n = a.cloneNode(true);
+  a.parentNode.replaceChild(n, a);
+  n.setAttribute("aria-label", "Secciones y mi cuenta");
+  n.addEventListener("click", ()=>{ modoDrawer = "menu"; abrirDrawer(); });
+})();
+
+const pintarDrawerV48 = pintarDrawer;
+pintarDrawer = function(){
+  pintarDrawerV48();
+  if(modoDrawer !== "menu") return;
+
+  const lista = $("dr-lista"), u = usuarioActual();
+  if(!lista || !u || $("dr-perfil-v48")) return;
+
+  /* Ya no hay dos sitios, así que sobra la aclaración de dónde está el perfil */
+  const pie = $("dr-pie-perfil");
+  if(pie) pie.remove();
+
+  const sinLeer = noLeidas();
+  const caja = document.createElement("div");
+  caja.id = "dr-perfil-v48";
+  caja.innerHTML =
+    '<div class="sep"></div>' +
+    '<button class="op" data-perfil48="info">' + ico("usuario", 21) + "Mi información</button>" +
+    '<button class="op" data-perfil48="notif">' + ico("campana", 21) + "Notificaciones" +
+      (sinLeer ? '<span class="glob">' + sinLeer + "</span>" : "") + "</button>" +
+    '<button class="op" data-perfil48="foto">' + ico("camara", 21) + "Cambiar mi foto</button>" +
+    '<div class="sep"></div>' +
+    '<button class="op salir" data-perfil48="salir">' + ico("salir", 21) + "Cerrar sesión</button>";
+  lista.appendChild(caja);
+
+  $$("#dr-perfil-v48 [data-perfil48]").forEach(b => b.addEventListener("click", async ()=>{
+    const q = b.dataset.perfil48;
+    cerrarDrawer();
+    if(q === "info")  return verPerfil();
+    if(q === "notif") return ir("notificaciones");
+    if(q === "foto")  { const f = $("pf-foto"); if(f) f.click(); return; }
+    if(q === "salir" && await confirmar("Cerrar sesión",
+        "Volverá a la pantalla de inicio de sesión.", "Cerrar sesión")) salir();
+  }));
+};
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
