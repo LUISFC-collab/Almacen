@@ -70,10 +70,35 @@
   s.async = false;          /* que corra después del motor, no antes */
   document.body.appendChild(s);
 
-  /* Guarda la app en el equipo para que abra sin señal. */
+  /* =====================================================================
+     Guarda la app en el equipo para que abra sin señal — y se actualiza
+     sola cuando hay una versión nueva.
+
+     Sin esto, el que ya tenía la app abierta seguía viendo la de ayer
+     hasta cerrarla del todo: el service worker sirve lo que guardó, y en
+     un celular la app casi nunca se cierra de verdad. En obra eso
+     significa que la mitad del equipo trabaja con una versión y la otra
+     mitad con otra, sin que nadie se entere.
+
+     Ahora, cuando el navegador detecta una versión nueva y ya había una
+     andando, la página se recarga sola UNA vez. Se hace en cuanto el
+     trabajador nuevo toma el control, no antes, para no recargar sobre
+     una versión a medio instalar.
+     ===================================================================== */
   if("serviceWorker" in navigator){
+    var yaRecargo = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function(){
+      if(yaRecargo) return;
+      yaRecargo = true;
+      location.reload();
+    });
+
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("sw.js").catch(function(){});
+      navigator.serviceWorker.register("sw.js").then(function(reg){
+        /* Se pregunta cada media hora: la app se deja abierta todo el
+           día y si no, no se entera de nada hasta el otro día. */
+        setInterval(function(){ reg.update().catch(function(){}); }, 1800000);
+      }).catch(function(){});
     });
   }
 })();
