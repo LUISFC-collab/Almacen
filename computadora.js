@@ -487,3 +487,315 @@
     });
   };
 })();
+
+/* ---------------------------------------------------------------
+   C4  El calendario de pedidos
+
+   El reloj de la fila de arriba decía cuántos registros de actividad
+   había: un número que casi nadie mira. En su lugar va un calendario,
+   que es lo que se pregunta de verdad en Pedidos — "¿qué se pidió el
+   martes?", "¿cómo viene lo de hoy?".
+
+   Cada día trae su marca "resueltos/total" (2/10): de un vistazo se ve
+   qué días quedaron cerrados y cuáles siguen abiertos, sin entrar a
+   ninguno. Resuelto = entregado, cerrado, recibido o rechazado; lo
+   demás sigue en curso.
+
+   Al elegir un día la lista de Pedidos muestra solo ese día. "Hoy"
+   vuelve al día corriente y "Todos" saca el filtro, porque a veces se
+   busca un pedido viejo y no se recuerda de cuándo era.
+
+   Un pedido cuenta en el día que le toca (`diaPedido`, el de la regla
+   de un pedido por día), no en el que se escribió: son distintos cuando
+   algo se cargó de noche para el día siguiente.
+   --------------------------------------------------------------- */
+(function calendarioPedidosC4(){
+  if(typeof pintarPedidos !== "function") return;
+
+  var MESES = ["enero","febrero","marzo","abril","mayo","junio","julio",
+               "agosto","septiembre","octubre","noviembre","diciembre"];
+  var DIAS = ["L","M","M","J","V","S","D"];
+
+  var elegido = null;          /* null = todos los días */
+  var mesVisto = null;         /* Date del primero del mes que se muestra */
+
+  function diaDe(r){ return r.diaPedido || diaLocal(r.fecha); }
+
+  /* Cuántos resueltos y cuántos hay, por día */
+  function conteo(){
+    var c = {};
+    (typeof misPedidos === "function" ? misPedidos() : []).forEach(function(r){
+      var d = diaDe(r);
+      if(!c[d]) c[d] = {total:0, listos:0};
+      c[d].total++;
+      if(CERRADOS.indexOf(r.estado) >= 0) c[d].listos++;
+    });
+    return c;
+  }
+
+  function iso(d){
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  var s = document.createElement("style");
+  s.id = "estilos-c4";
+  s.textContent = [
+    "#cal-c4{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;",
+      "height:100%;padding:12px 14px;border:1px solid var(--cajon-borde);border-radius:var(--r-m,14px);",
+      "background:var(--sup);cursor:pointer;min-width:96px}",
+    "#cal-c4:hover{border-color:var(--pri)}",
+    "#cal-c4 .dia{font-size:22px;font-weight:600;line-height:1;color:var(--pri)}",
+    "#cal-c4 .mes{font-size:10.5px;color:var(--tinta-sec);text-transform:uppercase;letter-spacing:.04em}",
+    "#cal-c4 .marca{font-size:11px;font-weight:600;color:var(--tinta-sec);margin-top:2px}",
+    "#cal-c4 .marca.listo{color:var(--ok,#085d3a)}",
+
+    ".hoja-cal{position:fixed;z-index:9999;background:var(--sup);border:1px solid var(--cajon-borde);",
+      "border-radius:14px;box-shadow:0 10px 30px rgba(16,24,40,.2);padding:12px;width:302px}",
+    ".hoja-cal .cab{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}",
+    ".hoja-cal .cab b{font-size:14px}",
+    ".hoja-cal .cab button{border:0;background:transparent;font:inherit;font-size:17px;cursor:pointer;",
+      "color:var(--pri);padding:2px 9px;border-radius:8px}",
+    ".hoja-cal .cab button:hover{background:var(--cajon)}",
+    ".hoja-cal .sem,.hoja-cal .rej{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}",
+    ".hoja-cal .sem span{font-size:10px;color:var(--tinta-sec);text-align:center;padding:3px 0}",
+    ".hoja-cal .rej button{border:1px solid transparent;background:transparent;border-radius:8px;",
+      "padding:5px 0 4px;font:inherit;cursor:pointer;display:flex;flex-direction:column;",
+      "align-items:center;gap:1px;min-height:40px}",
+    ".hoja-cal .rej button:hover{background:var(--cajon)}",
+    ".hoja-cal .rej .n{font-size:12.5px;color:var(--tinta)}",
+    ".hoja-cal .rej .m{font-size:9.5px;color:var(--tinta-sec);font-variant-numeric:tabular-nums}",
+    ".hoja-cal .rej .m.listo{color:var(--ok,#085d3a);font-weight:700}",
+    ".hoja-cal .rej button.hoy{border-color:var(--pri)}",
+    ".hoja-cal .rej button.elegido{background:var(--pri);}",
+    ".hoja-cal .rej button.elegido .n,.hoja-cal .rej button.elegido .m{color:var(--sobre-pri)}",
+    ".hoja-cal .rej button.fuera .n{opacity:.32}",
+    ".hoja-cal .pie{display:flex;gap:8px;margin-top:10px}",
+    ".hoja-cal .pie button{flex:1;border:1px solid var(--cajon-borde);background:var(--sup);",
+      "border-radius:9px;padding:8px;font:inherit;font-size:12.5px;cursor:pointer}",
+    ".hoja-cal .pie button:hover{border-color:var(--pri);color:var(--pri)}"
+  ].join("");
+  document.head.appendChild(s);
+
+  function cerrarHojaCal(){
+    var h = document.querySelector(".hoja-cal");
+    if(h) h.remove();
+    document.removeEventListener("click", cerrarHojaCal);
+  }
+
+  function abrirHojaCal(ancla){
+    cerrarHojaCal();
+    var c = conteo();
+    var hoy = hoyISO();
+    if(!mesVisto){
+      var base = elegido ? new Date(elegido + "T12:00:00") : new Date();
+      mesVisto = new Date(base.getFullYear(), base.getMonth(), 1);
+    }
+
+    var h = document.createElement("div");
+    h.className = "hoja-cal";
+
+    function pintar(){
+      var y = mesVisto.getFullYear(), m = mesVisto.getMonth();
+      var primero = new Date(y, m, 1);
+      /* lunes primero: getDay() da 0 el domingo */
+      var corr = (primero.getDay() + 6) % 7;
+      var inicio = new Date(y, m, 1 - corr);
+
+      var celdas = "";
+      for(var i = 0; i < 42; i++){
+        var d = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() + i);
+        var k = iso(d), dat = c[k];
+        var fuera = d.getMonth() !== m;
+        if(fuera && i > 34 && !dat) continue;
+        celdas += '<button data-dia="' + k + '" class="' +
+          (fuera ? "fuera " : "") + (k === hoy ? "hoy " : "") +
+          (k === elegido ? "elegido" : "") + '">' +
+          '<span class="n">' + d.getDate() + "</span>" +
+          (dat ? '<span class="m' + (dat.listos === dat.total ? " listo" : "") + '">' +
+                 dat.listos + "/" + dat.total + "</span>" : '<span class="m">·</span>') +
+          "</button>";
+      }
+
+      h.innerHTML =
+        '<div class="cab"><button data-mes="-1" aria-label="Mes anterior">‹</button>' +
+        "<b>" + MESES[m] + " " + y + "</b>" +
+        '<button data-mes="1" aria-label="Mes siguiente">›</button></div>' +
+        '<div class="sem">' + DIAS.map(function(x){ return "<span>" + x + "</span>"; }).join("") + "</div>" +
+        '<div class="rej">' + celdas + "</div>" +
+        '<div class="pie"><button data-ir="hoy">Hoy</button>' +
+        '<button data-ir="todos">Todos los días</button></div>';
+    }
+
+    pintar();
+    document.body.appendChild(h);
+
+    var r = ancla.getBoundingClientRect();
+    h.style.left = Math.min(r.left, innerWidth - h.getBoundingClientRect().width - 10) + "px";
+    h.style.top = Math.min(r.bottom + 6, innerHeight - h.getBoundingClientRect().height - 10) + "px";
+
+    h.addEventListener("click", function(e){
+      e.stopPropagation();
+      var b = e.target.closest("button");
+      if(!b) return;
+      if(b.dataset.mes){
+        mesVisto = new Date(mesVisto.getFullYear(), mesVisto.getMonth() + (+b.dataset.mes), 1);
+        return pintar();
+      }
+      if(b.dataset.dia)  elegido = (elegido === b.dataset.dia) ? null : b.dataset.dia;
+      if(b.dataset.ir === "hoy"){ elegido = hoyISO(); mesVisto = null; }
+      if(b.dataset.ir === "todos") elegido = null;
+      cerrarHojaCal();
+      pintarCalendarioC4();
+      if(typeof pantalla !== "undefined" && pantalla === "pedidos") pintarPedidos();
+      else ir("pedidos");
+    });
+
+    setTimeout(function(){ document.addEventListener("click", cerrarHojaCal); }, 0);
+  }
+
+  /* El calendario ocupa el lugar del reloj en la fila de arriba */
+  function pintarCalendarioC4(){
+    var caja = document.getElementById("ini-cabecera-v52");
+    if(!caja) return;
+    var reloj = document.getElementById("ini-actividad");
+    if(reloj) reloj.style.display = "none";
+
+    var b = document.getElementById("cal-c4");
+    if(!b){
+      b = document.createElement("button");
+      b.type = "button";
+      b.id = "cal-c4";
+      caja.insertBefore(b, caja.firstElementChild);
+      b.addEventListener("click", function(e){ e.stopPropagation(); abrirHojaCal(b); });
+    }
+
+    var c = conteo();
+    var k = elegido || hoyISO();
+    var d = new Date(k + "T12:00:00");
+    var dat = c[k];
+    b.innerHTML =
+      '<span class="dia">' + d.getDate() + "</span>" +
+      '<span class="mes">' + MESES[d.getMonth()].slice(0, 3) + (elegido ? "" : " · hoy") + "</span>" +
+      '<span class="marca' + (dat && dat.listos === dat.total ? " listo" : "") + '">' +
+      (dat ? dat.listos + "/" + dat.total : "sin pedidos") + "</span>";
+    b.title = elegido
+      ? "Viendo los pedidos del " + k + " · toque para cambiar de día"
+      : "Toque para elegir el día de los pedidos";
+  }
+
+  /* La lista de Pedidos muestra solo el día elegido */
+  var misPedidosC4 = misPedidos;
+  misPedidos = function(){
+    var todos = misPedidosC4.apply(this, arguments);
+    if(!elegido) return todos;
+    return todos.filter(function(r){ return diaDe(r) === elegido; });
+  };
+
+  var pintarPedidosC4 = pintarPedidos;
+  pintarPedidos = function(){
+    pintarPedidosC4.apply(this, arguments);
+    pintarCalendarioC4();
+  };
+
+  var irC4 = ir;
+  ir = function(){
+    var r = irC4.apply(this, arguments);
+    pintarCalendarioC4();
+    return r;
+  };
+
+  setTimeout(pintarCalendarioC4, 600);
+})();
+
+/* ---------------------------------------------------------------
+   C5  Fuera la flecha de volver
+
+   En computadora el menú de la izquierda está siempre a la vista: para
+   salir de cualquier pantalla se toca la sección a la que se quiere ir,
+   y la flecha de volver no agrega nada. Ocupaba el hueco de arriba a la
+   izquierda, justo al lado del botón de plegar el menú, y era fácil
+   tocar una queriendo la otra.
+
+   En el celular se queda: ahí no hay menú a la vista y la flecha es la
+   única forma de salir de una subpantalla.
+   --------------------------------------------------------------- */
+(function sinFlechaDeVolverC5(){
+  var s = document.createElement("style");
+  s.id = "estilos-c5";
+  s.textContent = "#btn-volver{display:none!important}";
+  document.head.appendChild(s);
+})();
+
+/* ---------------------------------------------------------------
+   C6  La cuenta, dentro del menú
+
+   El avatar de la esquina abría un panel que se superponía al menú que
+   ya está desplegado: dos formas de llegar a lo mismo, y una tapando a
+   la otra. En computadora sobra.
+
+   Sus opciones —mi información, cambiar la foto, cerrar sesión— bajan al
+   pie del menú de la izquierda, con el nombre y el cargo arriba de
+   ellas. Cerrar sesión es lo último de todo y va en rojo: es la única
+   acción de esa lista que se lamenta si se toca por error.
+
+   En el celular el avatar se queda: ahí es la ÚNICA puerta al menú, y
+   sacarlo dejaría al teléfono sin forma de navegar.
+   --------------------------------------------------------------- */
+(function cuentaEnElMenuC6(){
+  if(typeof pintarLateralV57 !== "function") return;
+
+  var s = document.createElement("style");
+  s.id = "estilos-c6";
+  s.textContent = [
+    "html.equipo-computadora #btn-perfil{display:none!important}",
+    "#lateral-v57 .quien-c6{display:flex;align-items:center;gap:9px;padding:10px 12px 2px;margin-top:6px}",
+    "#lateral-v57 .quien-c6 .ini{width:30px;height:30px;border-radius:999px;background:var(--pri-cont);",
+      "color:var(--pri);font-weight:700;font-size:12.5px;display:flex;align-items:center;",
+      "justify-content:center;flex:0 0 auto;overflow:hidden}",
+    "#lateral-v57 .quien-c6 .ini img{width:100%;height:100%;object-fit:cover}",
+    "#lateral-v57 .quien-c6 .d{min-width:0}",
+    "#lateral-v57 .quien-c6 .d b{display:block;font-size:13px;font-weight:600;",
+      "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    "#lateral-v57 .quien-c6 .d small{display:block;font-size:11px;color:var(--tinta-sec);",
+      "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    "#lateral-v57 .op-lat.salir-c6{color:var(--mal,#b42318)}",
+    "#lateral-v57 .op-lat.salir-c6:hover{background:var(--mal-f,#fde8e8)}"
+  ].join("");
+  document.head.appendChild(s);
+
+  var pintarSinCuenta = pintarLateralV57;
+  pintarLateralV57 = function(){
+    pintarSinCuenta.apply(this, arguments);
+    var nav = document.getElementById("lateral-v57");
+    var u = typeof usuarioActual === "function" ? usuarioActual() : null;
+    if(!nav || !u || nav.querySelector(".quien-c6")) return;
+
+    var sep = document.createElement("div");
+    sep.className = "sep-lat";
+    nav.appendChild(sep);
+
+    var quien = document.createElement("div");
+    quien.className = "quien-c6";
+    quien.innerHTML =
+      '<span class="ini">' + (typeof fotoHTML === "function" ? fotoHTML(u) : esc(u.nombre[0])) + "</span>" +
+      '<span class="d"><b>' + esc(u.nombre) + "</b><small>" +
+      esc((ROLES[rolEfectivo()] || {}).nombre || "") + "</small></span>";
+    nav.appendChild(quien);
+
+    var ops = [
+      {ic:"usuario", t:"Mi información", fn:function(){ verPerfil(); }},
+      {ic:"camara",  t:"Cambiar mi foto", fn:function(){ var f = document.getElementById("pf-foto"); if(f) f.click(); }},
+      {ic:"salir",   t:"Cerrar sesión", clase:"salir-c6", fn:async function(){
+        if(await confirmar("Cerrar sesión", "Volverá a la pantalla de inicio de sesión.", "Cerrar sesión")) salir();
+      }}
+    ];
+    ops.forEach(function(o){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "op-lat " + (o.clase || "");
+      b.innerHTML = ico(o.ic, 20) + "<span>" + o.t + "</span>";
+      b.addEventListener("click", o.fn);
+      nav.appendChild(b);
+    });
+  };
+})();
