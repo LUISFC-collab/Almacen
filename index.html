@@ -12876,6 +12876,7 @@ pintarBadge = function(){ pintarBadgeV57.apply(this, arguments); pintarLateralV5
     "html.equipo-computadora #ini-cabecera-v52{grid-template-columns:1.15fr 1fr 1fr;align-items:stretch}" +
     "html.equipo-tablet #ini-cabecera-v52{grid-template-columns:1fr 1fr}" +
     "#ini-cabecera-v52 #ini-actividad{margin:0}" +
+    "#scr-inicio .sech.sech-huerfana-v61{display:none}" +
     "#ini-cabecera-v52 #ini-actividad .fila,#ini-cabecera-v52 #ini-actividad .card{height:100%;margin:0}";
   document.head.appendChild(s);
 })();
@@ -12884,8 +12885,15 @@ const cabeceraInicioV58 = cabeceraInicioV52;
 cabeceraInicioV52 = function(){
   cabeceraInicioV58.apply(this, arguments);
   const caja = $("ini-cabecera-v52"), act = $("ini-actividad");
-  /* la actividad va primera: es la que dice si pasó algo */
-  if(caja && act && act.parentElement !== caja) caja.insertBefore(act, caja.firstElementChild);
+  if(caja && act && act.parentElement !== caja){
+    /* Al mudarla, el título "ACTIVIDAD" que la encabezaba se queda solo
+       más abajo. Se marca ANTES de mover, que después ya no es su
+       hermano y no hay cómo encontrarlo. */
+    const titulo = act.previousElementSibling;
+    if(titulo && titulo.classList.contains("sech")) titulo.classList.add("sech-huerfana-v61");
+    /* la actividad va primera: es la que dice si pasó algo */
+    caja.insertBefore(act, caja.firstElementChild);
+  }
 };
 
 /* ---------------------------------------------------------------
@@ -13111,8 +13119,9 @@ detalleReq = function(id){
       "justify-content:center;align-items:center}" +
     "#ini-cabecera-v52 #ini-actividad .fila .txt," +
     "#ini-cabecera-v52 #ini-actividad .fila .der{display:none}" +
-    "#ini-cabecera-v52 #ini-actividad .fila .mini{position:relative;margin:0}" +
-    "#ini-cabecera-v52 #ini-actividad .cuenta-v61{position:absolute;top:-7px;right:-9px;" +
+    "#ini-cabecera-v52 #ini-actividad .fila{position:relative}" +
+    "#ini-cabecera-v52 #ini-actividad .fila .mini{margin:0}" +
+    "#ini-cabecera-v52 #ini-actividad .cuenta-v61{position:absolute;top:6px;right:6px;" +
       "min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--pri);" +
       "color:var(--sobre-pri);font-size:10.5px;font-weight:700;line-height:19px;text-align:center;" +
       "box-shadow:0 0 0 2px var(--sup)}" +
@@ -13134,19 +13143,21 @@ function cuentaActividadV61(){
      no queda una columna vacía. */
   if(caja) caja.classList.toggle("sin-actividad", cont.classList.contains("oculto"));
 
-  const mini = cont.querySelector(".fila .mini");
-  if(!mini) return;
+  /* El contador va colgado del BOTÓN, no del círculo del ícono: ese
+     círculo recorta con overflow:hidden —lo necesita para las fotos
+     redondas— y se comía el número entero. */
+  const fila = cont.querySelector(".fila");
+  if(!fila) return;
   const n = (db.historial || []).length;
-  let g = mini.querySelector(".cuenta-v61");
+  let g = fila.querySelector(".cuenta-v61");
   if(!n){ if(g) g.remove(); return; }
   if(!g){
     g = document.createElement("span");
     g.className = "cuenta-v61";
-    mini.appendChild(g);
+    fila.appendChild(g);
   }
   g.textContent = n > 999 ? "999+" : n;
-  const f = cont.querySelector(".fila");
-  if(f) f.title = n + " registros de actividad · tóquelo para ver el detalle";
+  if(fila) fila.title = n + " registros de actividad · tóquelo para ver el detalle";
 }
 
 const cabeceraInicioV61 = cabeceraInicioV52;
