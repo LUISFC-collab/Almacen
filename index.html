@@ -13456,6 +13456,101 @@ importarArchivoReq = async function(e){
   document.head.appendChild(s);
 })();
 
+/* ---------------------------------------------------------------
+   V65  El requerimiento ES el formato
+
+   Queda solo lo que se usa: los dos botones arriba y el cuadro con las
+   filas del formato. Se va lo demás — el buscador de materiales, el
+   "repetir pedido anterior" y los adjuntos— porque el pedido entra por
+   el archivo o se escribe en la planilla, y no por esos caminos.
+
+   Los datos de cabecera del formato (obra, área, prioridad, fecha) NO
+   se borran: se esconden. Los llena solo la importación al leer la
+   cabecera del archivo, y el registro los sigue leyendo de ahí. Se
+   muestran arriba de la tabla en una tira de lectura, con "Editar" al
+   costado — si se borraran, un pedido escrito a mano saldría sin obra ni
+   fecha y eso es peor que un campo de más.
+
+   Y el botón pasa a decir "Enviar", que es lo que hace: el pedido se va
+   a la Administradora de Obra.
+   --------------------------------------------------------------- */
+(function estilosV65(){
+  if($("estilos-v65")) return;
+  const s = document.createElement("style");
+  s.id = "estilos-v65";
+  s.textContent =
+    /* fuera el buscador, el repetir y los adjuntos */
+    "#modal-requerimiento #mr-catalogo," +
+    '#modal-requerimiento [data-paso="3"]{display:none!important}' +
+    /* la cabecera del pedido se esconde, pero sigue viva */
+    "#modal-requerimiento .datos-ocultos-v65{display:none!important}" +
+
+    /* la tira de lectura con lo que trajo el archivo */
+    "#mr-cabecera-v65{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;" +
+      "padding:9px 12px;margin:0 0 10px;border:1px solid var(--cajon-borde);" +
+      "border-radius:10px;background:var(--sup);font-size:12.5px}" +
+    "#mr-cabecera-v65 .d{display:flex;gap:5px;align-items:baseline;min-width:0}" +
+    "#mr-cabecera-v65 .d span{color:var(--tinta-sec);font-size:11px}" +
+    "#mr-cabecera-v65 .d b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+    "#mr-cabecera-v65 .editar{margin-left:auto;border:0;background:transparent;color:var(--pri);" +
+      "font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 6px;border-radius:8px}" +
+    "#mr-cabecera-v65 .editar:hover{background:var(--cajon)}" +
+    "#mr-cabecera-v65.vacia .d{display:none}";
+  document.head.appendChild(s);
+})();
+
+/* La cabecera del pedido: escondida, y resumida arriba de la tabla */
+function cabeceraPedidoV65(){
+  const paso1 = document.querySelector('#modal-requerimiento [data-paso="1"]');
+  const paso2 = document.querySelector('#modal-requerimiento [data-paso="2"]');
+  if(!paso1 || !paso2) return;
+  paso1.classList.add("datos-ocultos-v65");
+
+  let tira = $("mr-cabecera-v65");
+  if(!tira){
+    tira = document.createElement("div");
+    tira.id = "mr-cabecera-v65";
+    const caja = paso2.querySelector(".caja-v50") || paso2;
+    caja.insertBefore(tira, caja.firstElementChild);
+  }
+
+  const v = id => { const c = $(id); return c ? String(c.value || "").trim() : ""; };
+  const partes = [
+    ["Obra", v("mr-obra")], ["Área", v("mr-area")],
+    ["Prioridad", v("mr-prioridad")], ["Necesario para", v("mr-necesario")]
+  ].filter(p => p[1]);
+
+  tira.classList.toggle("vacia", !partes.length);
+  tira.innerHTML =
+    (partes.length
+      ? partes.map(p => '<span class="d"><span>' + p[0] + "</span><b>" + esc(p[1]) + "</b></span>").join("")
+      : '<span class="d" style="display:flex"><span>Los datos de la obra salen de la cabecera del archivo</span></span>') +
+    '<button type="button" class="editar">' + (partes.length ? "Editar" : "Escribirlos") + "</button>";
+
+  tira.querySelector(".editar").addEventListener("click", ()=>{
+    const oculto = paso1.classList.toggle("datos-ocultos-v65");
+    if(!oculto) paso1.scrollIntoView({block:"nearest", behavior:"smooth"});
+  });
+}
+
+const pintarItemsReqV65 = pintarItemsReq;
+pintarItemsReq = function(){ pintarItemsReqV65.apply(this, arguments); cabeceraPedidoV65(); };
+
+const abrirRequerimientoV65 = abrirRequerimiento;
+abrirRequerimiento = function(){
+  const r = abrirRequerimientoV65.apply(this, arguments);
+  cabeceraPedidoV65();
+  return r;
+};
+
+/* "Registrar" es lo que hace la app; "Enviar" es lo que hace la persona */
+(function botonEnviarV65(){
+  ["mr-registrar", "mr-registrar2"].forEach(id => {
+    const b = $(id);
+    if(b) b.textContent = "Enviar";
+  });
+})();
+
 /* Paleta amarillo y azul · V43 · 11-08-2026 */
 
 /* ---------------------------------------------------------------
