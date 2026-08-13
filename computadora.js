@@ -994,3 +994,157 @@
 
   window.medirTablaC9 = medir;
 })();
+
+/* ---------------------------------------------------------------
+   C10  La pantalla del requerimiento, limpia
+
+   Se van tres cosas de encima de la planilla:
+
+   1. La barra de arriba del modal —Cancelar · Nuevo requerimiento ·
+      Enviar—. Los mismos dos botones están abajo, grandes: era decir lo
+      mismo dos veces y robarle una franja a la tabla.
+
+   2. La tira con la obra y el "Editar". Los datos siguen entrando solos
+      desde la cabecera del archivo; lo que se va es mostrarlos ahí. Para
+      no perder el caso del pedido escrito a mano —que no trae archivo y
+      por tanto no trae obra— ahora se pregunta al enviar, una sola vez y
+      solo si falta.
+
+   3. La fila de arriba (calendario y resumen) MIENTRAS el formulario
+      está abierto. Ojo: no se borra el calendario, se esconde. Es lo que
+      elige qué día de pedidos se mira, y sin él no habría forma de ver
+      los de ayer. Llenando una planilla no hace falta; al cerrar el
+      formulario vuelve solo.
+   --------------------------------------------------------------- */
+(function requerimientoLimpioC10(){
+  var s = document.createElement("style");
+  s.id = "estilos-c10";
+  s.textContent = [
+    /* 1 · la barra de arriba del modal: abajo están los mismos botones */
+    "#modal-requerimiento > .barra-modal{display:none}",
+    /* 2 · la tira con la obra */
+    "#mr-cabecera-v65{display:none!important}",
+    /* 3 · la fila de arriba, solo mientras se llena el formulario */
+    "html.llenando-req #ini-cabecera-v52{display:none}"
+  ].join("");
+  document.head.appendChild(s);
+
+  function marcar(abierto){
+    document.documentElement.classList.toggle("llenando-req", !!abierto);
+    /* la tabla vuelve a medirse: cambió lo que tiene encima */
+    setTimeout(function(){ if(window.medirTablaC9) medirTablaC9(); }, 60);
+  }
+
+  if(typeof abrirRequerimiento === "function"){
+    var abrirC10 = abrirRequerimiento;
+    abrirRequerimiento = function(){
+      var r = abrirC10.apply(this, arguments);
+      marcar(true);
+      return r;
+    };
+  }
+  if(typeof cerrarModal === "function"){
+    var cerrarC10 = cerrarModal;
+    cerrarModal = function(id){
+      var r = cerrarC10.apply(this, arguments);
+      if(id === "modal-requerimiento") marcar(false);
+      return r;
+    };
+  }
+
+  /* La obra ya no se ve en pantalla, así que si falta se pregunta al
+     enviar. Solo pasa en el pedido escrito a mano: el que viene de un
+     archivo la trae en la cabecera. */
+  if(typeof registrarRequerimiento === "function"){
+    var registrarC10 = registrarRequerimiento;
+    registrarRequerimiento = function(){
+      var obra = document.getElementById("mr-obra");
+      if(obra && !String(obra.value || "").trim() && itemsReq.length){
+        pedirTexto("¿Para qué obra es el pedido?", "Nombre de la obra")
+          .then(function(txt){
+            if(txt == null || !String(txt).trim()) return;
+            obra.value = String(txt).trim();
+            var area = document.getElementById("mr-area");
+            var u = usuarioActual();
+            if(area && !area.value && u && u.area) area.value = u.area;
+            registrarRequerimiento();
+          });
+        return;
+      }
+      return registrarC10.apply(this, arguments);
+    };
+  }
+})();
+
+/* ---------------------------------------------------------------
+   C11  Que lo marcado sea donde uno está
+
+   El menú marcaba solo las secciones de arriba, y solo por el nombre de
+   la pantalla. Con eso pasaban dos cosas raras:
+
+   · Tocar "Ver avance e indicadores" cambiaba la pantalla y NO quedaba
+     nada marcado: se estaba en algún lado y el menú decía que en
+     ninguno.
+   · Tocar una acción que abre un formulario dejaba marcada la sección
+     anterior — "Pedidos" en plomo mientras se llenaba otra cosa—, que es
+     justo lo que se veía.
+
+   Ahora las acciones también se marcan: al tocar una queda ella, y se
+   suelta en cuanto se toca una sección o se cierra el formulario que
+   abrió. La regla es simple: lo marcado es donde uno está, y si uno está
+   en algo que no es una sección, se marca la acción que lo llevó ahí.
+   --------------------------------------------------------------- */
+(function marcadoFielC11(){
+  if(typeof pintarLateralV57 !== "function") return;
+
+  var accionActiva = null;   /* el texto de la acción en la que se está */
+
+  /* Al tocar una sección se suelta cualquier acción marcada */
+  document.addEventListener("click", function(e){
+    var b = e.target.closest && e.target.closest("#lateral-v57 [data-ir-lat]");
+    if(b) accionActiva = null;
+  }, true);
+
+  var pintarSinMarca = pintarLateralV57;
+  pintarLateralV57 = function(){
+    pintarSinMarca.apply(this, arguments);
+    var nav = document.getElementById("lateral-v57");
+    if(!nav) return;
+
+    /* Si hay una acción en curso, manda ella: lo marcado tiene que ser lo
+       que se está haciendo, no la pantalla que quedó detrás del
+       formulario. Era lo que dejaba "Pedidos" en plomo mientras se
+       llenaba otra cosa. */
+    if(accionActiva)
+      Array.prototype.forEach.call(nav.querySelectorAll("[data-ir-lat].on"), function(x){
+        x.classList.remove("on");
+      });
+
+    Array.prototype.forEach.call(nav.querySelectorAll(".op-lat.accion"), function(b){
+      var texto = b.textContent.trim();
+      b.classList.toggle("on", texto === accionActiva);
+
+      if(b.dataset.marcaC11) return;
+      b.dataset.marcaC11 = "1";
+      b.addEventListener("click", function(){
+        accionActiva = texto;
+        /* Se repinta después de que la acción hizo lo suyo: si cambió de
+           pantalla, puede que ahora sí haya una sección que marcar. */
+        setTimeout(function(){ pintarLateralV57(); }, 60);
+      });
+    });
+  };
+
+  /* Al cerrar el formulario que abrió la acción, se suelta la marca */
+  if(typeof cerrarModal === "function"){
+    var cerrarC11 = cerrarModal;
+    cerrarModal = function(){
+      var r = cerrarC11.apply(this, arguments);
+      if(accionActiva){
+        accionActiva = null;
+        setTimeout(function(){ pintarLateralV57(); }, 40);
+      }
+      return r;
+    };
+  }
+})();
