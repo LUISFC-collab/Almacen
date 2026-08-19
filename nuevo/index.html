@@ -396,14 +396,20 @@ button{font-family:inherit;font-size:16px;cursor:pointer;border:none;color:inher
 /* Las tarjetas en fila, no en pila: solo donde de verdad hay una lista.
    :has() evita tocar los bloques de una sola tarjeta, que se verían rotos. */
 [data-equipo="computadora"] .pantalla>div:has(>.card+.card),
-[data-equipo="computadora"] .pantalla:has(>.card+.card){
+[data-equipo="computadora"] .pantalla.activa:has(>.card+.card){
   display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
   gap:0 14px;align-items:start;
 }
-[data-equipo="computadora"] .pantalla:has(>.card+.card)>.sech,
-[data-equipo="computadora"] .pantalla:has(>.card+.card)>.seg,
-[data-equipo="computadora"] .pantalla:has(>.card+.card)>.filtros,
-[data-equipo="computadora"] .pantalla:has(>.card+.card)>.btns{grid-column:1/-1}
+[data-equipo="computadora"] .pantalla.activa:has(>.card+.card)>.sech,
+[data-equipo="computadora"] .pantalla.activa:has(>.card+.card)>.seg,
+[data-equipo="computadora"] .pantalla.activa:has(>.card+.card)>.filtros,
+[data-equipo="computadora"] .pantalla.activa:has(>.card+.card)>.btns{grid-column:1/-1}
+
+/* Red de seguridad: una pantalla que no está activa no se ve, pase lo que
+   pase con las reglas de rejilla de más abajo. Sin esto, las siete
+   pantallas que llevan dos tarjetas se dibujaban todas encima de la
+   activa: la regla de rejilla le ganaba al display:none por especificidad. */
+[data-equipo="computadora"] .pantalla:not(.activa){display:none !important}
 [data-equipo="computadora"] .card{transition:box-shadow .15s}
 [data-equipo="computadora"] .card:hover{box-shadow:var(--s2)}
 
