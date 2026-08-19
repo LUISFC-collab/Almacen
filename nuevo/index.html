@@ -341,7 +341,165 @@ button{font-family:inherit;font-size:16px;cursor:pointer;border:none;color:inher
 .spin{width:20px;height:20px;border:2.5px solid var(--borde);border-top-color:var(--pri);border-radius:50%;animation:gira .7s linear infinite}
 @keyframes gira{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+
+/* =====================================================================
+   VISTA DE COMPUTADORA
+
+   El armazón de arriba es de teléfono: una columna de 460 px y un menú
+   que entra desde el costado. En una laptop eso deja tres cuartos de
+   pantalla en blanco y obliga a abrir el menú para cada salto.
+
+   Acá se reacomoda lo mismo, sin duplicar nada: el menú del perfil se
+   queda fijo a la izquierda, el contenido se ensancha, las tarjetas se
+   reparten en columnas y lo que en el celular sube desde abajo pasa a
+   ser una ventana centrada.
+
+   No se decide por el "user agent" —esa cadena miente— sino por el
+   ancho y por si hay mouse, igual que la app que ya está en obra.
+   Para probar la otra vista:  ?equipo=computadora  ·  ?equipo=celular
+   ===================================================================== */
+[data-equipo="computadora"] body{display:block;background:var(--fondo)}
+
+[data-equipo="computadora"] .app{
+  max-width:none;width:100%;box-shadow:none;padding-left:300px;
+}
+
+/* --- El menú del perfil deja de ser cajón y pasa a ser costado fijo --- */
+[data-equipo="computadora"] .velo{display:none !important}
+[data-equipo="computadora"] .drawer{
+  left:0;right:auto;width:300px;max-width:300px;
+  transform:none !important;box-shadow:none;border-right:1px solid var(--borde);
+  z-index:38;background:var(--sup);
+}
+[data-equipo="computadora"] .drawer .cabe{padding-top:20px}
+[data-equipo="computadora"] .drawer .op{cursor:pointer}
+[data-equipo="computadora"] .drawer .op:hover{background:var(--sup-var)}
+[data-equipo="computadora"] .drawer .op.on:hover{background:var(--pri-cont)}
+/* con el menú siempre a la vista, el botón que lo abría sobra */
+[data-equipo="computadora"] #btn-perfil{display:none}
+/* salvo cuando todavía no se entra: ahí no hay menú que mostrar */
+[data-equipo="computadora"] .app:has(#scr-login.activa),
+[data-equipo="computadora"] .app:has(#scr-solicitud.activa){padding-left:0}
+[data-equipo="computadora"] body:has(#scr-login.activa) .drawer,
+[data-equipo="computadora"] body:has(#scr-solicitud.activa) .drawer{display:none}
+[data-equipo="computadora"] #scr-login,
+[data-equipo="computadora"] #scr-solicitud{padding:34px 0}
+[data-equipo="computadora"] #scr-login>*,
+[data-equipo="computadora"] #scr-solicitud>*{max-width:460px;margin-left:auto;margin-right:auto}
+
+/* --- El contenido respira: ancho cómodo, no una tira de celular --- */
+[data-equipo="computadora"] .appbar{padding:10px 26px 12px}
+[data-equipo="computadora"] .pantalla{padding:22px 30px 110px}
+[data-equipo="computadora"] .pantalla>*{max-width:1180px}
+[data-equipo="computadora"] .sech{margin:26px 2px 11px}
+
+/* Las tarjetas en fila, no en pila: solo donde de verdad hay una lista.
+   :has() evita tocar los bloques de una sola tarjeta, que se verían rotos. */
+[data-equipo="computadora"] .pantalla>div:has(>.card+.card),
+[data-equipo="computadora"] .pantalla:has(>.card+.card){
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
+  gap:0 14px;align-items:start;
+}
+[data-equipo="computadora"] .pantalla:has(>.card+.card)>.sech,
+[data-equipo="computadora"] .pantalla:has(>.card+.card)>.seg,
+[data-equipo="computadora"] .pantalla:has(>.card+.card)>.filtros,
+[data-equipo="computadora"] .pantalla:has(>.card+.card)>.btns{grid-column:1/-1}
+[data-equipo="computadora"] .card{transition:box-shadow .15s}
+[data-equipo="computadora"] .card:hover{box-shadow:var(--s2)}
+
+/* Los filtros ya no necesitan deslizarse: caben todos */
+[data-equipo="computadora"] .filtros{flex-wrap:wrap;overflow:visible}
+[data-equipo="computadora"] .seg{max-width:620px}
+
+/* --- Lo que en el celular sube desde abajo, acá es una ventana --- */
+[data-equipo="computadora"] .modal{
+  inset:auto;top:50%;left:calc(50% + 150px);transform:translate(-50%,-50%);
+  width:min(860px,86vw);height:min(88vh,900px);border-radius:var(--r-l);
+  overflow:hidden;box-shadow:var(--s3);border:1px solid var(--borde);
+}
+/* El velo no puede ser ::before con position:fixed: dentro de un elemento
+   con transform, "fixed" deja de medirse contra la ventana y se mide contra
+   la propia ventana emergente. La sombra de 100vmax pinta la pantalla entera
+   sin ese enredo. */
+[data-equipo="computadora"] .modal{box-shadow:0 0 0 100vmax rgba(15,22,40,.5), var(--s3)}
+/* La animación del celular termina en transform:none y borraría el centrado */
+[data-equipo="computadora"] .modal.abierto{display:flex;animation:subePc .2s cubic-bezier(.2,.8,.3,1)}
+@keyframes subePc{
+  from{transform:translate(-50%,-47%);opacity:.4}
+  to{transform:translate(-50%,-50%);opacity:1}
+}
+[data-equipo="computadora"] .modal .barra-modal{padding:10px 14px}
+[data-equipo="computadora"] .modal .cuerpo{max-width:720px;padding:20px 24px 30px}
+[data-equipo="computadora"] .modal .pie-modal{max-width:720px}
+
+[data-equipo="computadora"] .hoja{align-items:center}
+[data-equipo="computadora"] .hoja .panel{
+  max-width:560px;border-radius:var(--r-l);max-height:84vh;
+  box-shadow:var(--s3);margin-left:300px;
+}
+[data-equipo="computadora"] .hoja .agarre{display:none}
+[data-equipo="computadora"] .hoja .cab{padding-top:18px}
+
+/* --- Detalles de ratón: el dedo perdona, el puntero no --- */
+[data-equipo="computadora"] .btn{width:auto;min-width:150px;padding:0 22px}
+[data-equipo="computadora"] .btn:hover{filter:brightness(1.06)}
+[data-equipo="computadora"] .btns>*{flex:0 1 auto}
+[data-equipo="computadora"] .pie-modal>*{flex:0 1 auto;min-width:170px}
+[data-equipo="computadora"] .modal .pie-modal{justify-content:flex-end}
+[data-equipo="computadora"] input,
+[data-equipo="computadora"] select,
+[data-equipo="computadora"] textarea{font-size:14.5px;padding:10px 12px}
+[data-equipo="computadora"] .fab{right:auto;left:calc(300px + 30px);bottom:26px}
+[data-equipo="computadora"] .snack{left:calc(50% + 150px)}
+
+/* Las listas largas —materiales, pedidos, herramientas, personal— se reparten
+   en columnas. En el celular es una fila por renglón porque no cabe otra cosa;
+   en la laptop caber tres y no hacer scroll es la mitad del trabajo del día.
+   Se usa :has() para tocar solo los contenedores que de verdad son lista: uno
+   con una sola fila puesto en rejilla se vería flotando y a medias. */
+[data-equipo="computadora"] .pantalla div:has(>.fila+.fila),
+[data-equipo="computadora"] .pantalla div:has(>.card+.card){
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+  gap:0 12px;align-items:start;
+}
+[data-equipo="computadora"] .fila:hover{box-shadow:var(--s2)}
+[data-equipo="computadora"] .fila{cursor:pointer}
+/* Los desplegables y acordeones dentro de una fila no deben partirse */
+[data-equipo="computadora"] .pantalla div:has(>.fila+.fila)>*{min-width:0}
 </style>
+<script>
+/* =====================================================================
+   Qué equipo es
+
+   Se decide antes de pintar nada, sobre <html>, para que la laptop no
+   vea medio segundo de teléfono al abrir. No se mira el "user agent":
+   esa cadena miente y cada modelo nuevo rompe la lista. Se mira si hay
+   mouse y cuánto mide la ventana, que es lo que de verdad separa una
+   laptop de un celular. La tablet con teclado trabaja como computadora;
+   sin él, como teléfono: cuenta lo que la persona hace con ella.
+
+   Para probar la otra vista sin cambiar de equipo:
+     ?equipo=computadora   ·   ?equipo=celular
+   ===================================================================== */
+(function queEquipoEs(){
+  var pedido = (location.search.match(/[?&]equipo=(computadora|celular|tablet)/) || [])[1];
+  var mq = function(q){ return window.matchMedia && window.matchMedia(q).matches; };
+  var hayMouse = mq("(any-pointer: fine)") || mq("(any-hover: hover)");
+  var ancho = window.innerWidth || document.documentElement.clientWidth;
+  var equipo = pedido || ((ancho >= 980 && hayMouse) ? "computadora" : "celular");
+  if(equipo === "tablet") equipo = "computadora";
+  document.documentElement.setAttribute("data-equipo", equipo);
+
+  /* Si se gira la tablet o se achica la ventana, la vista acompaña.
+     Solo cuando no se pidió una a mano: esa manda siempre. */
+  if(!pedido) window.addEventListener("resize", function(){
+    var a = window.innerWidth || document.documentElement.clientWidth;
+    var e = (a >= 980 && hayMouse) ? "computadora" : "celular";
+    if(e !== document.documentElement.getAttribute("data-equipo"))
+      document.documentElement.setAttribute("data-equipo", e);
+  });
+})();
+</script>
 </head>
 
 <body>
