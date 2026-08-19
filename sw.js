@@ -2,7 +2,7 @@
    Guarda la app en el celular y la abre SIN señal, pero SIEMPRE trae la
    version mas nueva cuando hay internet. Cambiar CACHE en cada despliegue
    para que nadie se quede con una version vieja. */
-const CACHE = 'almacen-cpq-v20260813q';
+const CACHE = 'almacen-cpq-v20260819r1';
 const SHELL = ['./', './index.html', './estilos.css', './pantallas.js', './app.js', './computadora.js', './celular.js', './config.js', './sync.js', './fotos.js', './heic2any.min.js', './manifest.json',
                './icon-192.png', './icon-512.png', './formatos/FORMATO DE REQUERIMIENTO.xlsx'];
 
@@ -26,6 +26,8 @@ self.addEventListener('activate', function (e) {
 });
 
 self.addEventListener('fetch', function (e) {
+  /* version.txt siempre fresco: es el que avisa que hay una version nueva */
+  try{ if(new URL(e.request.url).pathname.indexOf('version.txt') > -1) return; }catch(_){ }
   var url = e.request.url;
 
   /* Lo que va a Supabase NUNCA se cachea: es data viva. */
@@ -34,7 +36,7 @@ self.addEventListener('fetch', function (e) {
   /* La app y sus piezas: primero la red (para traer la version nueva),
      el cache solo como red de seguridad cuando no hay señal. */
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'reload' })
       .then(function (r) {
         if (r && r.ok) {
           var copia = r.clone();
