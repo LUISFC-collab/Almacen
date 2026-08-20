@@ -890,6 +890,8 @@ var SEC = [
   {k:"kardex",     t:"Kardex",     ic:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'}
 ];
 SEC.push(
+  {k:"usuarios", t:"Usuarios", ic:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/>'},
+  {k:"fotos", t:"Fotos y capturas", ic:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m21 16-5-5-6 6-3-3-4 4"/>'},
   {k:"mantenimiento", t:"Respaldo y poner en 0", ic:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>'},
   {k:"puestos", t:"Puestos", ic:'<path d="M17 20a5 5 0 0 0-10 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M20 20a4 4 0 0 0-3-3.8"/>'},
   {k:"revisar",  t:"Revisar", ic:'<path d="M9 11l2 2 4-4"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>'},
@@ -937,7 +939,7 @@ var PANEL = {
   compras:   ["comprar","despachar","consolidado","inventario"],
   supervisor:["requisito","mispedidos","inventario"],
   capataz:   ["inventario"],
-  admin:     ["puestos","consolidado","inventario","kardex","mantenimiento"]
+  admin:     ["puestos","usuarios","consolidado","inventario","kardex","fotos","mantenimiento"]
 };
 
 var TITULO = {
@@ -948,6 +950,8 @@ var TITULO = {
   despachar:"Despachar a obra", guia:"Guías emitidas",
   comprar:"Comprar lo aprobado", mispedidos:"Mis pedidos",
   puestos:"Los puestos de la obra",
+  usuarios:"Quién usa la aplicación",
+  fotos:"Fotos y capturas",
   mantenimiento:"Respaldo y poner en 0"
 };
 var cargo = "almacenero";
@@ -995,59 +999,277 @@ var VISTA = {};
 
 
 
+
+/* =====================================================================
+   BOTÓN QUE TAMBIÉN RECIBE ARCHIVOS
+
+   El botón de siempre —«Subir desde Excel», «Restaurar»— sigue estando
+   donde estaba y haciendo lo de siempre al tocarlo. Lo que se le agrega
+   es que acepta que le suelten el archivo encima: en la computadora el
+   archivo llega por correo o por WhatsApp y arrastrarlo es un gesto
+   menos que abrir el explorador y buscarlo.
+
+   El paso del medio no es adorno: antes de dar por bueno un archivo se
+   mira que sea lo que dice ser —un .xlsx es un zip y empieza por PK, un
+   respaldo tiene que poder leerse como JSON—. Así el error sale acá, con
+   el nombre del archivo delante, y no tres pantallas más adelante.
+
+   Estados del botón: normal → comprobando → listo (con el visto, y al
+   pulsarlo confirma) → hecho. Si algo no cuadra, queda en rojo con el
+   motivo y al pulsarlo vuelve a empezar.
+   ===================================================================== */
+function botonArchivo(id, etiqueta, acepta, clase){
+  return '<button class="bt ' + (clase || "") + ' recibe" type="button" id="' + id + '-bt" ' +
+    'data-estado="normal" data-rotulo="' + esc(etiqueta) + '">' + esc(etiqueta) + "</button>" +
+    '<input type="file" id="' + id + '" accept="' + (acepta || "") + '" hidden>';
+}
+
+/* alConfirmar(archivo) se llama cuando la persona pulsa el botón en verde */
+function enlazarBotonArchivo(id, opciones){
+  var o = opciones || {};
+  var bt = $(id + "-bt"), inp = $(id);
+  if(!bt || !inp) return;
+  var listo = null;
+
+  function pesa(x){
+    return x < 1024 ? x + " B"
+         : x < 1048576 ? (x/1024).toFixed(1) + " KB"
+         : (x/1048576).toFixed(1) + " MB";
+  }
+  function corto(t){ return t.length > 26 ? t.slice(0, 23) + "…" : t; }
+
+  function normal(){
+    listo = null; inp.value = "";
+    bt.dataset.estado = "normal";
+    bt.textContent = bt.dataset.rotulo;
+  }
+
+  /* Lo que dice la extensión y lo que el archivo es de verdad no siempre
+     coinciden: se miran los primeros bytes. */
+  function comprobar(a, dictamen){
+    var ext = (a.name.split(".").pop() || "").toLowerCase();
+    if(o.acepta && o.acepta.indexOf("." + ext) < 0)
+      return dictamen("Se esperaba " + o.acepta.replace(/,/g, " o ") + " y esto es ." + ext);
+    if(!a.size) return dictamen("El archivo está vacío.");
+
+    if(ext === "xlsx"){
+      var l1 = new FileReader();
+      l1.onload = function(){
+        var b = new Uint8Array(l1.result);
+        dictamen(b[0] === 0x50 && b[1] === 0x4B ? null
+                 : "No parece un Excel: está dañado o es otro formato.");
+      };
+      l1.onerror = function(){ dictamen("No se pudo leer el archivo."); };
+      l1.readAsArrayBuffer(a.slice(0, 4));
+      return;
+    }
+    if(ext === "json"){
+      var l2 = new FileReader();
+      l2.onload = function(){
+        try{ JSON.parse(l2.result); dictamen(null); }
+        catch(e){ dictamen("El archivo no se puede leer: no es un respaldo válido."); }
+      };
+      l2.onerror = function(){ dictamen("No se pudo leer el archivo."); };
+      l2.readAsText(a);
+      return;
+    }
+    dictamen(null);
+  }
+
+  function tomar(a){
+    if(!a) return;
+    bt.dataset.estado = "leyendo";
+    bt.textContent = "Comprobando " + corto(a.name) + "…";
+    comprobar(a, function(porque){
+      if(porque){
+        bt.dataset.estado = "mal";
+        bt.textContent = porque;
+        aviso(porque);
+        return;
+      }
+      listo = a;
+      bt.dataset.estado = "listo";
+      bt.textContent = "✓ " + corto(a.name) + " · " + pesa(a.size) + " — " +
+                       (o.confirmar || "toque para confirmar");
+    });
+  }
+
+  bt.addEventListener("click", function(){
+    if(bt.dataset.estado === "listo"){
+      var a = listo;
+      bt.dataset.estado = "hecho";
+      bt.textContent = "✓ " + corto(a.name) + " · cargado";
+      if(o.alConfirmar) o.alConfirmar(a);
+      setTimeout(normal, 2600);
+      return;
+    }
+    if(bt.dataset.estado === "leyendo") return;
+    if(bt.dataset.estado === "mal" || bt.dataset.estado === "hecho") normal();
+    inp.click();
+  });
+
+  inp.addEventListener("change", function(e){ tomar(e.target.files && e.target.files[0]); });
+
+  ["dragenter","dragover"].forEach(function(ev){
+    bt.addEventListener(ev, function(e){ e.preventDefault(); bt.classList.add("encima"); });
+  });
+  ["dragleave","dragend"].forEach(function(ev){
+    bt.addEventListener(ev, function(){ bt.classList.remove("encima"); });
+  });
+  bt.addEventListener("drop", function(e){
+    e.preventDefault(); bt.classList.remove("encima");
+    var f = e.dataTransfer && e.dataTransfer.files;
+    if(f && f.length) tomar(f[0]);
+  });
+
+  /* Sin esto, soltar un archivo fuera del botón hace que el navegador lo
+     abra y se pierda la pantalla con lo que se estaba escribiendo. */
+  if(!window.__soltarBloqueado){
+    window.__soltarBloqueado = true;
+    ["dragover","drop"].forEach(function(ev){
+      window.addEventListener(ev, function(e){
+        if(!e.target.closest || !e.target.closest(".recibe")) e.preventDefault();
+      });
+    });
+  }
+}
+
 /* ---------- foto, opcional ----------
    Una foto de celular pesa 3 MB y aquí se guardan en el propio equipo.
    Se reduce a 900 px y se comprime: queda en unos 80 KB, suficiente para
    reconocer la herramienta o el material, sin llenar la memoria. */
+/* El celular de obra no siempre entrega un JPG. Un iPhone manda HEIC, una
+   cámara manda TIFF, WhatsApp manda WEBP, y algún Android manda JFIF. Se
+   intentan dos caminos antes de darse por vencido:
+
+     1. createImageBitmap, que el navegador resuelve con su propio decodificador
+        y abre bastante más que la etiqueta <img> —AVIF, WEBP, y HEIC donde el
+        sistema lo soporta—.
+     2. la etiqueta <img> de siempre, para lo que el primero no tome.
+
+   Si ninguno abre la imagen, NO se pierde: se guarda el archivo tal cual llegó.
+   Ocupa más y no se ve en miniatura, pero el que reciba el respaldo la tiene.
+   Perder la foto de una herramienta prestada es peor que guardarla pesada. */
+function encoger(fuente, an0, al0, listo){
+  var max = 900, an = an0, al = al0;
+  if(an > max || al > max){
+    if(an > al){ al = Math.round(al * max / an); an = max; }
+    else { an = Math.round(an * max / al); al = max; }
+  }
+  var c = document.createElement("canvas");
+  c.width = an; c.height = al;
+  c.getContext("2d").drawImage(fuente, 0, 0, an, al);
+  try{ listo(c.toDataURL("image/jpeg", 0.7)); }
+  catch(e){ listo(null); }
+}
+
 function prepararFoto(archivo, listo){
-  var lector = new FileReader();
-  lector.onload = function(){
-    var img = new Image();
-    img.onload = function(){
-      var max = 900, an = img.width, al = img.height;
-      if(an > max || al > max){
-        if(an > al){ al = Math.round(al * max / an); an = max; }
-        else { an = Math.round(an * max / al); al = max; }
-      }
-      var c = document.createElement("canvas");
-      c.width = an; c.height = al;
-      c.getContext("2d").drawImage(img, 0, 0, an, al);
-      listo(c.toDataURL("image/jpeg", 0.7));
+  function tal_cual(){
+    /* último recurso: el archivo entero, sin tocar */
+    var l = new FileReader();
+    l.onload = function(){ listo(l.result, archivo.type || "", true); };
+    l.onerror = function(){ listo(null); };
+    l.readAsDataURL(archivo);
+  }
+
+  function porEtiqueta(){
+    var lector = new FileReader();
+    lector.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        encoger(img, img.width, img.height, function(d){
+          if(d) listo(d, "image/jpeg", false); else tal_cual();
+        });
+      };
+      img.onerror = tal_cual;
+      img.src = lector.result;
     };
-    img.onerror = function(){ listo(null); };
-    img.src = lector.result;
-  };
-  lector.readAsDataURL(archivo);
+    lector.onerror = function(){ listo(null); };
+    lector.readAsDataURL(archivo);
+  }
+
+  if(window.createImageBitmap){
+    createImageBitmap(archivo).then(function(bm){
+      encoger(bm, bm.width, bm.height, function(d){
+        if(bm.close) bm.close();
+        if(d) listo(d, "image/jpeg", false); else porEtiqueta();
+      });
+    }).catch(porEtiqueta);
+  } else porEtiqueta();
 }
 
 /* Campo de foto: se pinta donde se le diga y guarda en una variable */
+/* Dos entradas de archivo, no una. La diferencia está en `capture`: con él
+   el celular abre la cámara directamente y NO deja llegar a la galería; sin
+   él ofrece la galería y los archivos. Tenerlas juntas era el problema: el
+   almacenero que ya tenía la foto tomada no podía elegirla.
+
+   El `accept` lleva las extensiones sueltas además de image/*: hay Android
+   que no reconoce el HEIC del iPhone como imagen y lo oculta del explorador
+   si no se lo nombra. */
+var ACEPTA_FOTO = "image/*,.jpg,.jpeg,.jfif,.pjpeg,.png,.gif,.webp,.avif," +
+                  ".heic,.heif,.bmp,.tif,.tiff,.svg";
+
 function campoFoto(id, etiqueta){
   return '<div class="campo"><span>' + etiqueta + " <em style='font-weight:400;" +
     "text-transform:none;letter-spacing:0;color:var(--tinta3)'>· opcional</em></span>" +
-    '<input type="file" id="' + id + '" accept="image/*" capture="environment" hidden>' +
-    '<button class="bt" type="button" id="' + id + '-bt" style="justify-content:flex-start">' +
-    "Tomar o elegir foto</button>" +
+    '<input type="file" id="' + id + '" accept="' + ACEPTA_FOTO + '" hidden>' +
+    '<input type="file" id="' + id + '-cam" accept="' + ACEPTA_FOTO + '" capture="environment" hidden>' +
+    '<div class="botones" style="margin:0">' +
+      '<button class="bt pri recibe" type="button" id="' + id + '-camara">Tomar foto</button>' +
+      '<button class="bt recibe" type="button" id="' + id + '-galeria">Elegir de la galería</button>' +
+    "</div>" +
     '<div id="' + id + '-vista"></div></div>';
 }
 
 var fotos = {};
 function enlazarFoto(id){
-  var inp = $(id), bt = $(id + "-bt"), vista = $(id + "-vista");
-  if(!inp || !bt) return;
-  bt.addEventListener("click", function(){ inp.click(); });
-  inp.addEventListener("change", function(e){
-    var a = e.target.files && e.target.files[0];
+  var inp = $(id), cam = $(id + "-cam"), vista = $(id + "-vista");
+  var bCam = $(id + "-camara"), bGal = $(id + "-galeria");
+  if(!inp || !bCam || !bGal) return;
+
+  function tomar(a){
     if(!a) return;
-    prepararFoto(a, function(dato){
+    bGal.textContent = "Procesando…";
+    prepararFoto(a, function(dato, tipo, sinTocar){
+      bGal.textContent = "Elegir de la galería";
       if(!dato) return aviso("No se pudo leer esa imagen.");
       fotos[id] = dato;
+      var esVisible = !sinTocar || /^image\//.test(tipo || "");
       vista.innerHTML = '<div style="margin-top:9px;display:flex;align-items:center;gap:10px">' +
-        '<img src="' + dato + '" alt="" style="width:66px;height:66px;object-fit:cover;' +
-        'border-radius:10px;border:1px solid var(--linea)">' +
-        '<button class="bt chico" type="button" id="' + id + '-quitar">Quitar la foto</button></div>';
+        (esVisible
+          ? '<img src="' + dato + '" alt="" style="width:66px;height:66px;object-fit:cover;' +
+            'border-radius:10px;border:1px solid var(--linea)">'
+          : '<span class="marca-est est-info">sin vista previa</span>') +
+        '<div style="flex:1;min-width:0"><b style="display:block;font-size:13px;' +
+        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(a.name) + "</b>" +
+        '<small style="color:var(--tinta2)">' +
+        (sinTocar ? "Guardada tal cual: el navegador no supo achicar ese formato" : "Lista") +
+        "</small></div>" +
+        '<button class="bt chico" type="button" id="' + id + '-quitar">Quitar</button></div>';
       $(id + "-quitar").addEventListener("click", function(){
-        fotos[id] = null; vista.innerHTML = ""; inp.value = "";
+        fotos[id] = null; vista.innerHTML = ""; inp.value = ""; if(cam) cam.value = "";
       });
+    });
+  }
+
+  bCam.addEventListener("click", function(){ (cam || inp).click(); });
+  bGal.addEventListener("click", function(){ inp.click(); });
+  inp.addEventListener("change", function(e){ tomar(e.target.files && e.target.files[0]); });
+  if(cam) cam.addEventListener("change", function(e){ tomar(e.target.files && e.target.files[0]); });
+
+  /* los dos botones reciben la imagen arrastrada */
+  [bCam, bGal].forEach(function(b){
+    ["dragenter","dragover"].forEach(function(ev){
+      b.addEventListener(ev, function(e){ e.preventDefault(); b.classList.add("encima"); });
+    });
+    ["dragleave","dragend"].forEach(function(ev){
+      b.addEventListener(ev, function(){ b.classList.remove("encima"); });
+    });
+    b.addEventListener("drop", function(e){
+      e.preventDefault(); b.classList.remove("encima");
+      var f = e.dataTransfer && e.dataTransfer.files;
+      if(f && f.length) tomar(f[0]);
     });
   });
 }
@@ -1402,9 +1624,9 @@ VISTA.requisito = function(){
       '<label class="campo"><span>Fecha del pedido</span><input type="date" id="rq-fecha" value="' + hoy() + '" max="' + hoy() + '"></label>' +
     "</div>" +
     '<div class="botones"><button class="bt sec" type="button" id="rq-add">Agregar material</button>' +
-    '<button class="bt" type="button" id="rq-excel">Subir desde Excel</button>' +
-    '<input type="file" id="rq-archivo" accept=".xlsx,.csv" hidden>' +
     '<span class="der" id="rq-conteo"></span></div>' +
+    '<div class="botones">' +
+    botonArchivo("rq-archivo", "Subir desde Excel", ".xlsx,.csv") + "</div>" +
     '<div id="rq-items" style="margin-top:12px"></div>' +
     '<div class="botones"><button class="bt pri" type="button" id="rq-guardar">Registrar requisito</button></div>' +
     "</div>" +
@@ -1416,12 +1638,9 @@ VISTA.requisito = function(){
     var ults = $("rq-items").querySelectorAll('[data-c="desc"]');
     if(ults.length) ults[ults.length-1].focus();
   });
-  $("rq-excel").addEventListener("click", function(){ $("rq-archivo").click(); });
-  $("rq-archivo").addEventListener("change", function(e){
-    var a = e.target.files && e.target.files[0];
-    if(a) cargarExcel(a);
-    e.target.value = "";
-  });
+  enlazarBotonArchivo("rq-archivo", {acepta:".xlsx,.csv",
+    confirmar:"toque para cargar los renglones",
+    alConfirmar:function(a){ cargarExcel(a); }});
   $("rq-guardar").addEventListener("click", guardarReq);
   if(!itemsReq.length) itemsReq.push({desc:"", und:"und", cant:"", frente:"", obs:""});
   pintarItems();

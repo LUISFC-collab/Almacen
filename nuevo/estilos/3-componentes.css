@@ -106,3 +106,35 @@
     .tarjeta{ padding:14px; border-radius:var(--r-m); }
   }
   @media (prefers-reduced-motion: reduce){ *{ transition-duration:.01ms !important; } }
+
+  /* ---- Botones que reciben archivos ----
+     El mismo botón de siempre; solo cambia de aspecto según lo que está
+     pasando. El verde no es decorativo: dice «esto ya se comprobó, falta
+     que usted lo confirme», que es un estado distinto de «hecho». */
+  .bt.recibe{ transition:background .15s, color .15s, box-shadow .15s; text-align:center; }
+  .bt.recibe.encima{ box-shadow:inset 0 0 0 2px var(--azul); background:var(--azul-suave);
+    color:var(--azul); }
+  .bt.recibe[data-estado="leyendo"]{ cursor:progress; opacity:.75; }
+  .bt.recibe[data-estado="listo"]{ background:var(--verde); color:#fff; }
+  .bt.recibe[data-estado="hecho"]{ background:var(--verde-suave); color:var(--verde); }
+  .bt.recibe[data-estado="mal"]{ background:var(--rojo-suave); color:var(--rojo);
+    font-size:12.5px; line-height:1.3; }
+
+  /* ---- Galería de fotos y capturas ----
+     Cuadros de alto fijo para que la rejilla no baile mientras cargan:
+     si cada uno creciera al llegar su imagen, la lista saltaría bajo el
+     dedo justo cuando se está mirando. */
+  .galeria{ display:grid; gap:12px;
+    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
+  .foto-caja{ margin:0; border:1px solid var(--linea); border-radius:var(--r-m);
+    overflow:hidden; background:var(--sup2); }
+  .foto-lienzo{ height:130px; display:flex; align-items:center; justify-content:center;
+    background:var(--sup2); overflow:hidden; }
+  .foto-lienzo img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .foto-lienzo.sin{ background:var(--rojo-suave); }
+  .sin-dato{ font-size:12px; font-weight:700; letter-spacing:.08em; color:var(--rojo); }
+  .foto-caja figcaption{ padding:9px 10px; display:flex; flex-direction:column; gap:2px; }
+  .foto-caja figcaption b{ font-size:12.5px; font-weight:620; color:var(--tinta);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .foto-caja figcaption small{ font-size:11.5px; color:var(--tinta2);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

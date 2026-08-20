@@ -179,8 +179,8 @@ VISTA.consolidado = function(){
             " · " + db.consolidadoCargado.renglones + " renglones</p></div>"
           : "") +
         '<div class="botones" style="margin:0">' +
-        '<button class="bt sec" type="button" id="co-subir">Subir el consolidado del día</button>' +
-        '<input type="file" id="co-archivo" accept=".xlsx,.csv" hidden></div></div>'
+        botonArchivo("co-archivo", "Subir el consolidado del día", ".xlsx,.csv", "sec") +
+        "</div></div>"
       : "") +
     '<div class="tarjeta"><h2>Alcance de la obra</h2>' +
     '<p class="nota">Conforme llega la mercadería, lo que falta va bajando.</p>' +
@@ -203,13 +203,10 @@ VISTA.consolidado = function(){
         '<td><div class="barra-avance"><span style="width:' + p + '%"></span></div></td></tr>';
     }).join("") + "</tbody></table></div></div></div>";
 
-  if($("co-subir")){
-    $("co-subir").addEventListener("click", function(){ $("co-archivo").click(); });
-    $("co-archivo").addEventListener("change", function(e){
-      var a = e.target.files && e.target.files[0];
-      if(a) cargarConsolidado(a);
-      e.target.value = "";
-    });
+  if($("co-archivo-bt")){
+    enlazarBotonArchivo("co-archivo", {acepta:".xlsx,.csv",
+      confirmar:"toque para reemplazar el consolidado",
+      alConfirmar:function(a){ cargarConsolidado(a); }});
   }
 };
 
@@ -636,10 +633,73 @@ function nombreRespaldo(){
          dos(d.getDate()) + "-" + dos(d.getHours()) + dos(d.getMinutes()) + ".json";
 }
 
-function descargarRespaldo(){
+/* Recorre los datos buscando fotos. Se busca por el nombre del campo y no
+   por una lista fija de sitios: mañana habrá fotos en la guía o en el
+   despacho y este respaldo tiene que llevárselas igual, sin que nadie se
+   acuerde de venir a agregarlas aquí. */
+function recorrerFotos(nodo, hacer){
+  if(!nodo || typeof nodo !== "object") return;
+  if(Array.isArray(nodo)){
+    for(var i = 0; i < nodo.length; i++) recorrerFotos(nodo[i], hacer);
+    return;
+  }
+  for(var k in nodo){
+    if(!Object.prototype.hasOwnProperty.call(nodo, k)) continue;
+    var v = nodo[k];
+    if(typeof v === "string" && /foto|imagen|adjunto/i.test(k)) hacer(nodo, k, v);
+    else if(v && typeof v === "object") recorrerFotos(v, hacer);
+  }
+}
+
+/* Un respaldo que solo lleve el enlace de la foto no sirve: el día que se
+   restaura en otro equipo, o que se limpia el Storage, quedan cuadros rotos.
+   Por eso las fotos que viven en el servidor se bajan y se meten dentro del
+   archivo. Las que ya están guardadas dentro de los datos viajan solas. */
+async function armarRespaldo(){
+  var copia = JSON.parse(JSON.stringify(db));
+  var pendientes = [], dentro = 0, bajadas = 0, fallaron = 0;
+
+  recorrerFotos(copia, function(obj, k, v){
+    if(/^data:/i.test(v)){ dentro++; return; }
+    if(/^https?:\/\//i.test(v)) pendientes.push({obj:obj, k:k, url:v});
+  });
+
+  for(var i = 0; i < pendientes.length; i++){
+    var p = pendientes[i];
+    try{
+      var r = await fetch(p.url);
+      if(!r.ok) throw new Error(r.status);
+      var b = await r.blob();
+      p.obj[p.k] = await new Promise(function(ok, mal){
+        var l = new FileReader();
+        l.onload = function(){ ok(l.result); };
+        l.onerror = mal;
+        l.readAsDataURL(b);
+      });
+      bajadas++;
+    }catch(e){
+      /* se deja el enlace: al menos queda constancia de dónde estaba */
+      fallaron++;
+    }
+  }
+  return {datos:copia, dentro:dentro, bajadas:bajadas, fallaron:fallaron};
+}
+
+async function descargarRespaldo(){
+  var bt = $("mn-bajar");
+  if(bt){ bt.disabled = true; bt.textContent = "Reuniendo las fotos…"; }
+  var r;
+  try{ r = await armarRespaldo(); }
+  catch(e){
+    if(bt){ bt.disabled = false; bt.textContent = "Descargar respaldo"; }
+    return aviso("No se pudo armar el respaldo.");
+  }
+
   var carga = {
-    marca:"almacen-cpq", version:1, fecha:new Date().toISOString(),
-    equipo:navigator.userAgent, datos:db
+    marca:"almacen-cpq", version:2, fecha:new Date().toISOString(),
+    equipo:navigator.userAgent,
+    fotos:{guardadas:r.dentro + r.bajadas, bajadasDelServidor:r.bajadas, sinPoderBajar:r.fallaron},
+    datos:r.datos
   };
   var a = document.createElement("a");
   var url = URL.createObjectURL(new Blob([JSON.stringify(carga, null, 1)],
@@ -647,7 +707,11 @@ function descargarRespaldo(){
   a.href = url; a.download = nombreRespaldo();
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
-  aviso("Respaldo descargado.");
+
+  if(bt){ bt.disabled = false; bt.textContent = "Descargar respaldo"; }
+  aviso("Respaldo descargado" +
+    (carga.fotos.guardadas ? " · " + carga.fotos.guardadas + " foto(s) dentro" : "") +
+    (r.fallaron ? " · " + r.fallaron + " no se pudo bajar" : "") + ".");
 }
 
 function restaurarDesde(archivo, alTerminar){
@@ -688,6 +752,332 @@ async function limpiarEsteEquipo(){
     }
   }catch(e){}
 }
+
+
+
+/* =====================================================================
+   QUIÉN USA LA APLICACIÓN
+
+   Quién se dio de alta en ESTE equipo, con qué puesto y con qué clave.
+   La clave se ve porque el almacenero es quien atiende al que la olvidó,
+   y hoy no hay otra forma de recordársela: la página la guarda tal cual.
+   Va tapada hasta que se pulsa: en el almacén siempre hay alguien mirando
+   la pantalla por encima del hombro.
+
+   El día que la base esté conectada esto cambia y es mejor así: las claves
+   las guardará cifradas el servicio de acceso y nadie —ni el administrador,
+   ni yo, ni Supabase— podrá leerlas. Ahí, en lugar de mostrarla, habrá que
+   darle una nueva a quien la pierda.
+   ===================================================================== */
+var usuOrden = "nombre";
+var usuVistas = {};
+
+VISTA.usuarios = function(){
+
+  function pintar(){
+    var lista = (db.usuarios || []).slice();
+
+    if(usuOrden === "nombre")
+      lista.sort(function(a,b){ return String(a.nombre).localeCompare(String(b.nombre), "es"); });
+    else if(usuOrden === "puesto")
+      lista.sort(function(a,b){
+        return String(NOMBRE_PUESTO[a.puesto] || a.puesto)
+          .localeCompare(String(NOMBRE_PUESTO[b.puesto] || b.puesto), "es"); });
+    else if(usuOrden === "fecha")
+      lista.sort(function(a,b){ return String(b.creado || "").localeCompare(String(a.creado || "")); });
+    else if(usuOrden === "fotocheck")
+      lista.sort(function(a,b){ return (+a.fc || 0) - (+b.fc || 0); });
+
+    var porPuesto = {};
+    lista.forEach(function(u){ porPuesto[u.puesto] = (porPuesto[u.puesto] || 0) + 1; });
+
+    $("zona").innerHTML = '<div class="vista">' +
+      '<div class="tarjeta">' +
+        "<h2>Quién está en la aplicación</h2>" +
+        '<p class="nota">Los perfiles de <b>este equipo</b>. Desde aquí se cambia el ' +
+        "puesto de cada uno —quién es la Administradora de Obra, quién el Jefe de " +
+        "Logística—, y eso decide qué ve al entrar. Mientras la app no esté conectada " +
+        "a la base, cada computadora y cada celular lleva su propia lista.</p>" +
+        '<div class="cifras">' +
+          '<div class="cifra"><b>' + lista.length + "</b><small>perfiles</small></div>" +
+          Object.keys(porPuesto).map(function(k){
+            return '<div class="cifra"><b>' + porPuesto[k] + "</b><small>" +
+              esc(NOMBRE_PUESTO[k] || k) + "</small></div>";
+          }).join("") +
+        "</div>" +
+        '<label class="campo" style="margin-top:12px;max-width:320px"><span>Ordenar por</span>' +
+        '<select id="us-orden">' +
+          op("nombre", "Nombre", usuOrden) +
+          op("puesto", "Puesto", usuOrden) +
+          op("fotocheck", "N° de fotocheck", usuOrden) +
+          op("fecha", "Fecha de alta, la más nueva primero", usuOrden) +
+        "</select></label>" +
+      "</div>" +
+
+      '<div class="tarjeta">' +
+        (lista.length
+          ? '<div class="tabla-caja"><table><thead><tr>' +
+            "<th>Nombre</th><th>Puesto</th><th>Fotocheck</th><th>Celular</th>" +
+            "<th>Contraseña</th><th>Alta</th></tr></thead><tbody>" +
+            lista.map(fila).join("") + "</tbody></table></div>"
+          : '<p class="nota">Todavía no hay ningún perfil en este equipo.</p>') +
+      "</div></div>";
+
+    $("us-orden").addEventListener("change", function(){ usuOrden = this.value; pintar(); });
+
+    var bs = $("zona").querySelectorAll("[data-ver-clave]");
+    for(var i = 0; i < bs.length; i++){
+      bs[i].addEventListener("click", function(){
+        var fc = this.dataset.verClave;
+        usuVistas[fc] = !usuVistas[fc];
+        pintar();
+      });
+    }
+
+    /* Cambiar el puesto cambia lo que esa persona ve al entrar. Su propia
+       cuenta no aparece como desplegable: el administrador quitándose a sí
+       mismo el mando dejaría la app sin quien la administre. */
+    var ss = $("zona").querySelectorAll("[data-puesto-de]");
+    for(var j = 0; j < ss.length; j++){
+      ss[j].addEventListener("change", function(){
+        var fc = this.dataset.puestoDe, nuevo = this.value, k;
+        for(k = 0; k < db.usuarios.length; k++){
+          if(db.usuarios[k].fc === fc){
+            db.usuarios[k].puesto = nuevo;
+            guardar();
+            aviso(db.usuarios[k].nombre.split(" ")[0] + " ahora entra como " +
+                  (NOMBRE_PUESTO[nuevo] || nuevo) + ".");
+            break;
+          }
+        }
+        pintar();
+      });
+    }
+  }
+
+  function op(v, t, sel){
+    return '<option value="' + v + '"' + (sel === v ? " selected" : "") + ">" + t + "</option>";
+  }
+
+  function fila(u){
+    var esAdmin = u.fc === FOTOCHECK_DUENO || u.puesto === "admin";
+    var abierta = !!usuVistas[u.fc];
+    return "<tr>" +
+      "<td><b>" + esc(u.nombre || "—") + "</b>" +
+        (esAdmin ? ' <span class="marca-est est-info">administra</span>' : "") + "</td>" +
+      "<td>" +
+        (u.fc === FOTOCHECK_DUENO
+          ? esc(NOMBRE_PUESTO[u.puesto] || u.puesto) +
+            "<br><small>y administrador de la app</small>"
+          : '<select data-puesto-de="' + esc(u.fc) + '" style="min-width:180px">' +
+            PUESTOS.map(function(p){
+              return '<option value="' + p.k + '"' + (u.puesto === p.k ? " selected" : "") +
+                ">" + esc(p.t) + "</option>";
+            }).join("") + "</select>") +
+      "</td>" +
+      '<td class="n">' + esc(u.fc || "—") + "</td>" +
+      "<td>" + esc(u.cel || "—") + "</td>" +
+      "<td>" +
+        (abierta
+          ? "<code>" + esc(u.clave || "—") + "</code> "
+          : '<span style="letter-spacing:.22em;color:var(--tinta3)">••••••</span> ') +
+        '<button class="bt chico" type="button" data-ver-clave="' + esc(u.fc) + '">' +
+        (abierta ? "Ocultar" : "Ver") + "</button></td>" +
+      "<td>" + (u.creado ? fecha(u.creado) : "—") + "</td>" +
+    "</tr>";
+  }
+
+  pintar();
+};
+
+/* =====================================================================
+   FOTOS Y CAPTURAS
+
+   Una foto que no llegó al Storage no avisa: la fila se guarda igual y el
+   hueco recién aparece meses después, cuando alguien reclama la entrega y
+   la prueba no está. Esta pantalla junta todas las imágenes que hay en los
+   datos —de materiales, movimientos, préstamos, guías, lo que sea— y las
+   pone una al lado de otra para ver de un vistazo cuáles faltan.
+
+   Tres estados, y el del medio es el que importa:
+     · en el equipo   la imagen viaja dentro de los datos (data:)
+     · en el servidor la imagen está en el Storage y se pudo abrir
+     · NO DATA        hay un enlace pero el servidor no la devuelve, o el
+                      navegador no supo abrir ese formato
+
+   Se comprueba de verdad, no se supone: cada imagen del servidor se
+   intenta cargar y se marca según lo que conteste.
+   ===================================================================== */
+function reunirFotos(){
+  var lista = [];
+
+  function meter(origen, fecha, quien, ref, valor){
+    if(!valor || typeof valor !== "string") return;
+    lista.push({
+      origen:origen, fecha:fecha || "", quien:quien || "—", ref:ref || "",
+      valor:valor,
+      donde: /^data:/i.test(valor) ? "equipo"
+           : /^https?:\/\//i.test(valor) ? "servidor" : "raro",
+      estado: /^data:/i.test(valor) ? "ok" : "?"
+    });
+  }
+
+  (db.materiales || []).forEach(function(m){
+    /* la ficha del material no guarda quién le sacó la foto: va sin persona,
+       si no el desplegable de gente se llenaría de nombres de materiales */
+    meter("Material", m.creado || "", "", m.nombre || "", m.foto);
+  });
+  (db.movimientos || []).forEach(function(m){
+    meter(m.tipo === "ingreso" ? "Ingreso" : "Salida", m.fecha,
+          m.persona || m.frente || "—", m.item || "", m.foto);
+  });
+  (db.herramientas || []).forEach(function(h){
+    if(h.prestamo) meter("Préstamo", h.prestamo.fecha || "",
+                          h.prestamo.responsable || "—", h.nombre || "", h.prestamo.foto);
+  });
+  (db.guias || []).forEach(function(g){
+    meter("Guía", g.fecha, g.transportista || "—", g.numero || "", g.foto);
+  });
+  (db.requerimientos || []).forEach(function(r){
+    meter("Requisito", r.fecha, r.solicitante || r.quien || "—", r.codigo || "", r.foto);
+    (r.items || []).forEach(function(it){
+      meter("Requisito", r.fecha, r.solicitante || r.quien || "—", it.desc || "", it.foto);
+    });
+  });
+
+  return lista;
+}
+
+var fotosOrden = "fecha";
+var fotosFiltro = "todas";
+var fotosQuien = "todos";
+
+VISTA.fotos = function(){
+  var todas = reunirFotos();
+
+  function pintar(){
+    var lista = todas.slice();
+
+    if(fotosFiltro === "faltan")   lista = lista.filter(function(f){
+      return f.estado === "mal" || f.donde === "raro"; });
+    if(fotosFiltro === "servidor") lista = lista.filter(function(f){ return f.donde === "servidor"; });
+    if(fotosFiltro === "equipo")   lista = lista.filter(function(f){ return f.donde === "equipo"; });
+    if(fotosQuien !== "todos")     lista = lista.filter(function(f){ return f.quien === fotosQuien; });
+
+    if(fotosOrden === "fecha")
+      lista.sort(function(a,b){ return String(b.fecha).localeCompare(String(a.fecha)); });
+    else if(fotosOrden === "quien")
+      lista.sort(function(a,b){ return String(a.quien).localeCompare(String(b.quien), "es"); });
+    else if(fotosOrden === "origen")
+      lista.sort(function(a,b){ return String(a.origen).localeCompare(String(b.origen), "es"); });
+
+    var mal = todas.filter(function(f){ return f.estado === "mal" || f.donde === "raro"; }).length;
+    var vistos = {}, gente = [];
+    todas.forEach(function(f){
+      if(f.quien && f.quien !== "—" && !vistos[f.quien]){ vistos[f.quien] = 1; gente.push(f.quien); }
+    });
+    gente.sort(function(a,b){ return a.localeCompare(b, "es"); });
+
+    $("zona").innerHTML = '<div class="vista">' +
+      '<div class="tarjeta">' +
+        "<h2>Todas las fotos y capturas</h2>" +
+        '<p class="nota">Lo que se ve aquí es lo que existe de verdad. Las marcadas ' +
+        "<b>NO DATA</b> tienen un enlace guardado pero el servidor no las devuelve, o " +
+        "el navegador no supo abrir ese formato: esas hay que volver a tomarlas.</p>" +
+        '<div class="cifras">' +
+          '<div class="cifra"><b>' + todas.length + "</b><small>en total</small></div>" +
+          '<div class="cifra"><b>' +
+            todas.filter(function(f){ return f.donde === "equipo"; }).length +
+            "</b><small>en el equipo</small></div>" +
+          '<div class="cifra"><b>' +
+            todas.filter(function(f){ return f.donde === "servidor"; }).length +
+            "</b><small>en el servidor</small></div>" +
+          '<div class="cifra"><b id="fo-mal">' + mal + "</b><small>sin dato</small></div>" +
+        "</div>" +
+        '<div class="rejilla dos" style="margin-top:12px">' +
+          '<label class="campo"><span>Ordenar por</span><select id="fo-orden">' +
+            opcion("fecha", "Fecha, la más nueva primero", fotosOrden) +
+            opcion("quien", "Quién la subió", fotosOrden) +
+            opcion("origen", "De dónde salió", fotosOrden) +
+          "</select></label>" +
+          '<label class="campo"><span>Quién la subió</span><select id="fo-quien">' +
+            opcion("todos", "Todos", fotosQuien) +
+            gente.map(function(q){ return opcion(q, q, fotosQuien); }).join("") +
+          "</select></label>" +
+          '<label class="campo"><span>Mostrar</span><select id="fo-filtro">' +
+            opcion("todas", "Todas", fotosFiltro) +
+            opcion("faltan", "Solo las que no cargan", fotosFiltro) +
+            opcion("servidor", "Solo las del servidor", fotosFiltro) +
+            opcion("equipo", "Solo las del equipo", fotosFiltro) +
+          "</select></label>" +
+        "</div>" +
+      "</div>" +
+
+      '<div class="tarjeta">' +
+        (lista.length
+          ? '<div class="galeria" id="fo-galeria">' + lista.map(tarjeta).join("") + "</div>"
+          : '<p class="nota">No hay fotos que mostrar con este filtro.</p>') +
+      "</div></div>";
+
+    $("fo-orden").addEventListener("change", function(){ fotosOrden = this.value; pintar(); });
+    $("fo-filtro").addEventListener("change", function(){ fotosFiltro = this.value; pintar(); });
+    $("fo-quien").addEventListener("change", function(){ fotosQuien = this.value; pintar(); });
+    if(lista.length) comprobar(lista);
+  }
+
+  function opcion(v, t, sel){
+    return '<option value="' + v + '"' + (sel === v ? " selected" : "") + ">" + t + "</option>";
+  }
+
+  function tarjeta(f, i){
+    return '<figure class="foto-caja" data-i="' + i + '">' +
+      '<div class="foto-lienzo" id="fo-l' + i + '">' +
+        (f.donde === "raro"
+          ? '<span class="sin-dato">NO DATA</span>'
+          : '<img alt="" data-src="' + esc(f.valor) + '" data-i="' + i + '">') +
+      "</div>" +
+      "<figcaption>" +
+        '<b>' + esc(f.origen) + (f.ref ? " · " + esc(f.ref) : "") + "</b>" +
+        "<small>" + (f.fecha ? fecha(f.fecha) : "sin fecha") + " · " + esc(f.quien) + "</small>" +
+      "</figcaption></figure>";
+  }
+
+  /* El número de «sin dato» no se sabe al pintar: se sabe cuando cada
+     imagen contesta. Se corrige el número en su sitio y no se repinta la
+     pantalla, porque repintar volvería a lanzar todas las cargas. */
+  function recontar(){
+    var c = $("fo-mal");
+    if(c) c.textContent = todas.filter(function(f){
+      return f.estado === "mal" || f.donde === "raro"; }).length;
+  }
+
+  /* Cargar la imagen es la única forma de saber si está: un enlace guardado
+     no prueba nada. Las del equipo se pintan directo; las del servidor se
+     intentan y se marcan según conteste. */
+  function comprobar(lista){
+    var imgs = $("fo-galeria").querySelectorAll("img[data-src]");
+    for(var i = 0; i < imgs.length; i++){
+      (function(img){
+        var idx = +img.dataset.i, f = lista[idx];
+        img.onload = function(){
+          f.estado = "ok";
+          img.closest(".foto-lienzo").classList.add("cargada");
+          recontar();
+        };
+        img.onerror = function(){
+          f.estado = "mal";
+          var l = img.closest(".foto-lienzo");
+          l.classList.add("sin");
+          l.innerHTML = '<span class="sin-dato">NO DATA</span>';
+          recontar();
+        };
+        img.src = img.dataset.src;
+      })(imgs[i]);
+    }
+  }
+
+  pintar();
+};
 
 /* El desplegado vive fuera de la función: si viviera dentro, cada
    repintado —restaurar, borrar— lo cerraría y habría que abrirlo de nuevo. */
@@ -730,9 +1120,7 @@ VISTA.mantenimiento = function(){
         '<p class="nota">Reemplaza todo lo de este equipo por lo del archivo. Lo que hay ' +
         "ahora se pierde, así que conviene descargar un respaldo antes. Sus dos accesos " +
         "de administrador vuelven aunque el archivo no los traiga.</p>" +
-        '<input type="file" id="mn-archivo" accept=".json,application/json" ' +
-        'style="display:block;width:100%;margin-bottom:11px">' +
-        '<button class="bt" type="button" id="mn-restaurar">Restaurar</button>' +
+        botonArchivo("mn-archivo", "Restaurar desde un archivo", ".json") +
       "</div>" +
 
       '<div class="tarjeta">' +
@@ -786,16 +1174,16 @@ VISTA.mantenimiento = function(){
 
     $("mn-bajar").addEventListener("click", descargarRespaldo);
 
-    $("mn-restaurar").addEventListener("click", function(){
-      var f = $("mn-archivo").files[0];
-      if(!f) return aviso("Elija primero el archivo del respaldo.");
-      restaurarDesde(f, function(err){
-        if(err) return aviso(err);
-        aviso("Restaurado: " + db.consolidado.length + " renglones y " +
-              db.usuarios.length + " perfiles.");
-        pintar();
-      });
-    });
+    enlazarBotonArchivo("mn-archivo", {acepta:".json",
+      confirmar:"toque para restaurar",
+      alConfirmar:function(f){
+        restaurarDesde(f, function(err){
+          if(err) return aviso(err);
+          aviso("Restaurado: " + db.consolidado.length + " renglones y " +
+                db.usuarios.length + " perfiles.");
+          pintar();
+        });
+      }});
 
     $("mn-cache").addEventListener("click", async function(){
       /* la orden queda anotada en los datos: cuando la base esté conectada
