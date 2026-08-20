@@ -522,19 +522,10 @@ function intentarEntrar(){
   aviso("Bienvenido, " + u.nombre.split(" ")[0] + ".");
 }
 
-function pintarPortada(){
-  /* el administrador no está entre los botones de mirar sin cuenta:
-     a ese panel se entra con el fotocheck del dueño y su contraseña */
-  $("puestos").innerHTML = PUESTOS.filter(function(p){ return !p.admin; }).map(function(p){
-    return '<button class="puesto' + (p.destacado ? " destacado" : "") +
-      (p.admin ? " admin" : "") + '" type="button" data-p="' + p.k + '">' +
-      '<span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-      'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p.ic + "</svg></span>" +
-      "<span><b>" + p.t + "</b><small>" + p.d + "</small></span></button>";
-  }).join("");
-  var bs = $("puestos").querySelectorAll("[data-p]"), i;
-  for(i=0;i<bs.length;i++) bs[i].addEventListener("click", function(){ entrar(this.dataset.p); });
-}
+/* La portada ya no ofrece entrar a mirar sin cuenta: todo el que use la
+   app tiene su perfil, y ese perfil vive en la tabla, no en el equipo.
+   Se deja la función vacía para no tocar a quien la llama. */
+function pintarPortada(){}
 
 function esDueno(){
   return db.usuarios.some(function(u){
