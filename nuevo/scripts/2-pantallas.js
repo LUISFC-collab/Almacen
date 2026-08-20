@@ -618,6 +618,200 @@ $("ac-crear").addEventListener("click", function(){
 $("al-cancelar").addEventListener("click", function(){ $("alta").style.display = "none"; });
 $("al-ok").addEventListener("click", crearPerfil);
 
+
+/* =====================================================================
+   RESPALDO Y PONER EN 0
+
+   Un solo botón abre las cuatro cosas. Están juntas y escondidas a
+   propósito: tres de ellas se hacen una vez al año y la última borra
+   la obra entera. Un botón suelto en el panel se pulsa sin querer.
+
+   Las cuentas de administración nunca se pierden: ni al restaurar un
+   respaldo ajeno ni al borrar todo. Si se perdieran, nadie podría
+   volver a entrar a este equipo a arreglarlo.
+   ===================================================================== */
+function nombreRespaldo(){
+  var d = new Date(), dos = function(n){ return String(n).padStart(2,"0"); };
+  return "respaldo-almacen-" + d.getFullYear() + "-" + dos(d.getMonth()+1) + "-" +
+         dos(d.getDate()) + "-" + dos(d.getHours()) + dos(d.getMinutes()) + ".json";
+}
+
+function descargarRespaldo(){
+  var carga = {
+    marca:"almacen-cpq", version:1, fecha:new Date().toISOString(),
+    equipo:navigator.userAgent, datos:db
+  };
+  var a = document.createElement("a");
+  var url = URL.createObjectURL(new Blob([JSON.stringify(carga, null, 1)],
+                                          {type:"application/json"}));
+  a.href = url; a.download = nombreRespaldo();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  aviso("Respaldo descargado.");
+}
+
+function restaurarDesde(archivo, alTerminar){
+  var lector = new FileReader();
+  lector.onload = function(){
+    var g;
+    try{ g = JSON.parse(lector.result); }
+    catch(e){ return alTerminar("Ese archivo no es un respaldo: no se pudo leer."); }
+    var d = g && g.datos ? g.datos : g;      /* admite el formato viejo, sin envoltura */
+    if(!d || !Array.isArray(d.consolidado) || !Array.isArray(d.usuarios))
+      return alTerminar("Ese archivo no es un respaldo de esta aplicación.");
+    db = d;
+    if(!db.materiales) db.materiales = [];
+    if(!db.herramientas) db.herramientas = [];
+    if(!db.requerimientos) db.requerimientos = [];
+    if(!db.guias) db.guias = [];
+    if(!db.movimientos) db.movimientos = [];
+    asegurarAdmins();                        /* el respaldo puede venir sin ellas */
+    guardar();
+    alTerminar(null, d);
+  };
+  lector.onerror = function(){ alTerminar("No se pudo leer el archivo."); };
+  lector.readAsText(archivo);
+}
+
+/* Deja este equipo sin nada guardado del navegador: los cachés de la
+   página y cualquier trabajador de servicio que haya quedado de una
+   versión anterior. Es lo que hace que vuelva a bajar todo del servidor. */
+async function limpiarEsteEquipo(){
+  try{
+    if(window.caches){
+      var llaves = await caches.keys();
+      for(var i = 0; i < llaves.length; i++) await caches.delete(llaves[i]);
+    }
+    if(navigator.serviceWorker){
+      var regs = await navigator.serviceWorker.getRegistrations();
+      for(var j = 0; j < regs.length; j++) await regs[j].unregister();
+    }
+  }catch(e){}
+}
+
+/* El desplegado vive fuera de la función: si viviera dentro, cada
+   repintado —restaurar, borrar— lo cerraría y habría que abrirlo de nuevo. */
+var mantAbierto = false;
+
+VISTA.mantenimiento = function(){
+
+  function pintar(){
+    $("zona").innerHTML = '<div class="vista">' + respaldo() + ponerEnCero() + "</div>";
+    enganchar();
+  }
+
+  /* ---- Respaldo, restaurar y caché: los tres detrás de un botón ---- */
+  function respaldo(){
+    return '<div class="tarjeta">' +
+        "<h2>Respaldo</h2>" +
+        '<p class="nota">Guardar lo de hoy en el PC, traerlo de vuelta, o forzar que ' +
+        "todos los equipos bajen la versión nueva.</p>" +
+        '<button class="bt pri" type="button" id="mn-abrir">' +
+        (mantAbierto ? "Cerrar" : "Abrir respaldo") + "</button>" +
+      "</div>" + (mantAbierto ? desplegado() : "");
+  }
+
+  function desplegado(){
+    return '<div class="tarjeta">' +
+        "<h2>Descargar al PC</h2>" +
+        '<p class="nota">Un archivo con todo lo de este equipo: consolidado, pedidos, ' +
+        "guías, movimientos, herramientas y perfiles. Es lo único que permite volver atrás.</p>" +
+        '<div class="cifras">' +
+          '<div class="cifra"><b>' + db.consolidado.length + "</b><small>consolidado</small></div>" +
+          '<div class="cifra"><b>' + db.requerimientos.length + "</b><small>pedidos</small></div>" +
+          '<div class="cifra"><b>' + db.movimientos.length + "</b><small>movimientos</small></div>" +
+          '<div class="cifra"><b>' + db.usuarios.length + "</b><small>perfiles</small></div>" +
+        "</div>" +
+        '<button class="bt pri" type="button" id="mn-bajar">Descargar respaldo</button>' +
+      "</div>" +
+
+      '<div class="tarjeta">' +
+        "<h2>Restaurar desde el PC</h2>" +
+        '<p class="nota">Reemplaza todo lo de este equipo por lo del archivo. Lo que hay ' +
+        "ahora se pierde, así que conviene descargar un respaldo antes. Sus dos accesos " +
+        "de administrador vuelven aunque el archivo no los traiga.</p>" +
+        '<input type="file" id="mn-archivo" accept=".json,application/json" ' +
+        'style="display:block;width:100%;margin-bottom:11px">' +
+        '<button class="bt" type="button" id="mn-restaurar">Restaurar</button>' +
+      "</div>" +
+
+      '<div class="tarjeta">' +
+        "<h2>Borrar caché en todos los dispositivos</h2>" +
+        '<p class="nota">Cuando alguien sigue viendo la versión vieja. Este equipo se ' +
+        "limpia al instante. Los demás lo hacen solos la próxima vez que abran la app, " +
+        "en cuanto la base de datos esté conectada: la orden viaja con los datos.</p>" +
+        (db.purga ? '<p class="nota"><b>Última orden dada:</b> ' + fechaLarga(db.purga) + "</p>" : "") +
+        '<button class="bt sec" type="button" id="mn-cache">Borrar caché y recargar</button>' +
+      "</div>";
+  }
+
+  /* ---- Poner en 0: aparte, siempre a la vista, y con su propia llave ---- */
+  function ponerEnCero(){
+    return '<div class="tarjeta" style="border-left:3px solid var(--rojo)">' +
+        "<h2>Poner en 0</h2>" +
+        '<p class="nota">Deja la obra en cero: consolidado, pedidos, guías, movimientos, ' +
+        "herramientas y todos los perfiles menos los dos de administración —sin esos nadie " +
+        "podría volver a entrar—. No se puede deshacer: descargue el respaldo antes. " +
+        "Para confirmar, escriba <b>PONER EN 0</b>.</p>" +
+        '<input type="text" id="mn-confirmo" placeholder="PONER EN 0" ' +
+        'autocomplete="off" style="margin-bottom:11px">' +
+        '<button class="bt" type="button" id="mn-borrar" ' +
+        'style="background:var(--rojo);color:#fff">Poner en 0</button>' +
+      "</div>";
+  }
+
+  function fechaLarga(iso){
+    var d = new Date(iso);
+    return isNaN(d) ? String(iso) : d.toLocaleString();
+  }
+
+  function enganchar(){
+    $("mn-abrir").addEventListener("click", function(){ mantAbierto = !mantAbierto; pintar(); });
+
+    $("mn-borrar").addEventListener("click", function(){
+      var escrito = ($("mn-confirmo").value || "").trim().toUpperCase().replace(/\s+/g, " ");
+      if(escrito !== "PONER EN 0") return aviso("Escriba PONER EN 0 para confirmar.");
+      db = {
+        obra:db.obra, area:db.area, serie:db.serie, correlativo:db.correlativo,
+        consolidado:[], materiales:[], herramientas:[], usuarios:[],
+        requerimientos:[], guias:[], movimientos:[]
+      };
+      asegurarAdmins();
+      guardar();
+      aviso("Todo en cero. Quedan solo sus dos accesos.");
+      pintar();
+    });
+
+    if(!mantAbierto) return;
+
+    $("mn-bajar").addEventListener("click", descargarRespaldo);
+
+    $("mn-restaurar").addEventListener("click", function(){
+      var f = $("mn-archivo").files[0];
+      if(!f) return aviso("Elija primero el archivo del respaldo.");
+      restaurarDesde(f, function(err){
+        if(err) return aviso(err);
+        aviso("Restaurado: " + db.consolidado.length + " renglones y " +
+              db.usuarios.length + " perfiles.");
+        pintar();
+      });
+    });
+
+    $("mn-cache").addEventListener("click", async function(){
+      /* la orden queda anotada en los datos: cuando la base esté conectada
+         viaja a los demás equipos y cada uno se limpia una sola vez */
+      db.purga = new Date().toISOString();
+      guardar();
+      try{ localStorage.setItem("almacen_purga_hecha", db.purga); }catch(e){}
+      await limpiarEsteEquipo();
+      aviso("Caché borrado. Recargando…");
+      setTimeout(function(){ location.reload(); }, 700);
+    });
+  }
+
+  pintar();
+};
+
 var guardado = localStorage.getItem("almacen_simple_cargo");
 if(guardado && PANEL[guardado]) entrar(guardado, localStorage.getItem("almacen_simple_persona"));
 else {

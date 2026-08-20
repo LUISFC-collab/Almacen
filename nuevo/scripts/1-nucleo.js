@@ -705,18 +705,62 @@ function guardar(){ try{ localStorage.setItem(CLAVE, JSON.stringify(db)); }catch
     db.consolidado = fresca.consolidado;
     cambio = true;
   }
-  /* Las dos cuentas de administración se agregan si faltan. Si ya estaban
-     pero con otra contraseña, se corrige: la página no tiene pantalla para
-     cambiarla, así que la única que puede diferir es la que quedó guardada
-     de una versión anterior. A las cuentas creadas a mano no se las toca. */
+  if(asegurarAdmins()) cambio = true;
+  if(cambio) guardar();
+})();
+
+/* Las dos cuentas de administración no pueden faltar nunca: si se pierden,
+   nadie entra a arreglar nada y el equipo queda muerto. Se llama al abrir,
+   al restaurar un respaldo y al borrar todo. Devuelve si tuvo que tocar algo.
+   A las cuentas creadas a mano no las toca: solo repone las sembradas. */
+function asegurarAdmins(){
+  var fresca = semilla(), cambio = false, i, j;
   for(i = 0; i < fresca.usuarios.length; i++){
-    var f = fresca.usuarios[i];
-    var ya = null, j;
+    var f = fresca.usuarios[i], ya = null;
     for(j = 0; j < db.usuarios.length; j++) if(db.usuarios[j].fc === f.fc) ya = db.usuarios[j];
     if(!ya){ db.usuarios.push(f); cambio = true; }
+    /* la página no tiene pantalla para cambiar contraseñas: si la guardada
+       difiere de la sembrada es que quedó de una versión anterior */
     else if(ya.clave !== f.clave){ ya.clave = f.clave; cambio = true; }
   }
-  if(cambio) guardar();
+  return cambio;
+}
+
+/* ---- La orden de borrar caché ----
+   El administrador la da desde «Respaldo y poner en 0». Queda anotada en
+   los datos con su fecha, no en este equipo, para que viaje: en cuanto la
+   base esté conectada, la orden llega a cada celular con el resto de los
+   datos y cada uno se limpia solo la primera vez que la ve.
+
+   Se compara contra lo último que ESTE equipo ya obedeció. Sin esa marca
+   el equipo se limpiaría y recargaría en bucle, porque la orden no
+   caduca: se queda escrita.
+
+   Hoy, sin base, solo actúa en el equipo donde se pulsa. No es que esté a
+   medias: es que un equipo no tiene forma de hablarle a otro sin un
+   servidor en medio. ---- */
+(function obedecerPurga(){
+  if(!db.purga) return;
+  var hecha = null;
+  try{ hecha = localStorage.getItem("almacen_purga_hecha"); }catch(e){}
+  if(hecha === db.purga) return;
+  try{ localStorage.setItem("almacen_purga_hecha", db.purga); }catch(e){}
+
+  var limpiar = [];
+  try{
+    if(window.caches) limpiar.push(caches.keys().then(function(k){
+      return Promise.all(k.map(function(x){ return caches.delete(x); }));
+    }));
+    if(navigator.serviceWorker) limpiar.push(
+      navigator.serviceWorker.getRegistrations().then(function(rs){
+        return Promise.all(rs.map(function(r){ return r.unregister(); }));
+      }));
+  }catch(e){}
+
+  Promise.all(limpiar).catch(function(){}).then(function(){
+    /* una sola recarga: la marca ya quedó puesta, no vuelve a entrar aquí */
+    location.reload();
+  });
 })();
 
 function aviso(t){
@@ -846,6 +890,7 @@ var SEC = [
   {k:"kardex",     t:"Kardex",     ic:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'}
 ];
 SEC.push(
+  {k:"mantenimiento", t:"Respaldo y poner en 0", ic:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>'},
   {k:"puestos", t:"Puestos", ic:'<path d="M17 20a5 5 0 0 0-10 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M20 20a4 4 0 0 0-3-3.8"/>'},
   {k:"revisar",  t:"Revisar", ic:'<path d="M9 11l2 2 4-4"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>'},
   {k:"despachar",t:"Despachar",  ic:'<path d="M3 12h11M10 6l6 6-6 6M17 5v14"/>'},
@@ -892,7 +937,7 @@ var PANEL = {
   compras:   ["comprar","despachar","consolidado","inventario"],
   supervisor:["requisito","mispedidos","inventario"],
   capataz:   ["inventario"],
-  admin:     ["puestos","consolidado","inventario","kardex"]
+  admin:     ["puestos","consolidado","inventario","kardex","mantenimiento"]
 };
 
 var TITULO = {
@@ -902,7 +947,8 @@ var TITULO = {
   kardex:"Kardex de movimientos", revisar:"Requisitos por revisar",
   despachar:"Despachar a obra", guia:"Guías emitidas",
   comprar:"Comprar lo aprobado", mispedidos:"Mis pedidos",
-  puestos:"Los puestos de la obra"
+  puestos:"Los puestos de la obra",
+  mantenimiento:"Respaldo y poner en 0"
 };
 var cargo = "almacenero";
 var actual = PANEL[cargo][0];
