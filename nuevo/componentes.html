@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Componentes · Almacén CPQ</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="estilos/1-base.css">
+<link rel="stylesheet" href="estilos/2-panel-izquierdo.css">
+<link rel="stylesheet" href="estilos/3-componentes.css">
+<style>
+  body{ padding:26px 18px 60px; display:block; }
+  .hoja{ max-width:940px; margin:0 auto; }
+  h1{ font-size:26px; margin:0 0 4px; letter-spacing:-.022em; }
+  .sub{ color:var(--tinta2); font-size:14px; margin:0 0 8px; }
+  h2{ font-size:12px; text-transform:uppercase; letter-spacing:.1em;
+      color:var(--tinta3); margin:34px 0 12px; font-weight:700; }
+  .muestra{ background:var(--panel); border-radius:var(--r-l); box-shadow:var(--sombra);
+            padding:18px; margin-bottom:12px; }
+  .muestra > .pie{ margin:14px 0 0; padding-top:12px; border-top:1px solid var(--linea);
+                   font-size:12.5px; color:var(--tinta2); line-height:1.55; }
+  .muestra > .pie b{ color:var(--tinta); font-weight:620; }
+  code{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+        background:var(--sup2); border-radius:5px; padding:1px 6px; }
+  .fila{ display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+<div class="hoja">
+
+<h1>Componentes de la página</h1>
+<p class="sub">Cada pieza visual que usa la aplicación, con su clase y para qué sirve.
+   Si cambia algo en <code>estilos/</code>, aquí se ve el efecto sin tener que entrar a la app.</p>
+
+<h2>Colores</h2>
+<div class="muestra">
+  <div class="fila">
+    <span style="width:74px;height:52px;border-radius:10px;background:var(--azul)"></span>
+    <span style="width:74px;height:52px;border-radius:10px;background:var(--amarillo)"></span>
+    <span style="width:74px;height:52px;border-radius:10px;background:var(--verde)"></span>
+    <span style="width:74px;height:52px;border-radius:10px;background:var(--ambar)"></span>
+    <span style="width:74px;height:52px;border-radius:10px;background:var(--rojo)"></span>
+  </div>
+  <p class="pie">Azul mina y amarillo de casco. Sobre el amarillo la tinta va oscura
+    (<code>--sobre-amarillo</code>): el blanco sobre amarillo no se lee con el celular al sol.
+    Verde, ámbar y rojo son de estado, no de marca — no se usan para decorar.</p>
+</div>
+
+<h2>Botones</h2>
+<div class="muestra">
+  <div class="fila">
+    <button class="bt pri">Registrar</button>
+    <button class="bt sec">Agregar material</button>
+    <button class="bt">Cancelar</button>
+    <button class="bt chico">Quitar</button>
+  </div>
+  <p class="pie"><b>Azul</b> para la acción principal, <b>amarillo</b> para agregar,
+    <b>gris</b> para lo secundario. Nunca dos azules en la misma tarjeta: si todo pesa igual,
+    nada guía. Todos miden 46 px de alto — lo mínimo para acertar con guante.</p>
+</div>
+
+<h2>Campos</h2>
+<div class="muestra">
+  <div class="rejilla dos">
+    <label class="campo"><span>Material</span><input placeholder="Nombre del material"></label>
+    <label class="campo"><span>Cantidad</span><input class="n" type="number" value="40"></label>
+    <label class="campo"><span>Unidad</span><select><option>Unidad (und)</option><option>Metro (m)</option></select></label>
+    <label class="campo"><span>Fecha</span><input type="date" value="2026-08-19"></label>
+  </div>
+  <p class="pie">La etiqueta va arriba, en mayúsculas pequeñas. Las cantidades se alinean a la
+    derecha con <code>.n</code> y usan cifras de ancho fijo, para que las columnas cuadren.</p>
+</div>
+
+<h2>Marcas de estado</h2>
+<div class="muestra">
+  <div class="fila">
+    <span class="marca-est est-ok">conforme</span>
+    <span class="marca-est est-alerta">faltan 2</span>
+    <span class="marca-est est-mal">no llegó</span>
+    <span class="marca-est est-info">sin verificar</span>
+  </div>
+  <p class="pie">Cuatro estados y ninguno más. <b>Sin verificar no es lo mismo que cero</b>:
+    cero significa «lo busqué y no vino»; sin verificar, «todavía no lo revisé».</p>
+</div>
+
+<h2>Cifras</h2>
+<div class="muestra">
+  <div class="cifras">
+    <div class="cifra"><b>608</b><small>renglones</small></div>
+    <div class="cifra"><b>56</b><small>falta comprar</small></div>
+    <div class="cifra"><b>51%</b><small>comprado</small></div>
+    <div class="cifra"><b style="color:var(--rojo)">1</b><small>herramienta vencida</small></div>
+  </div>
+  <p class="pie">Van arriba de cada pantalla. La que necesita atención se pinta en rojo;
+    las demás quedan en tinta normal.</p>
+</div>
+
+<h2>Tabla</h2>
+<div class="muestra">
+  <div class="tabla-caja">
+    <table>
+      <thead><tr><th>Código</th><th>Descripción</th><th class="n">Pide</th>
+        <th class="n">Llegó</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr><td>R01-011</td><td>Escoba</td><td class="n">3 und</td><td class="n">2</td>
+            <td><span class="marca-est est-alerta">falta 1</span></td></tr>
+        <tr><td>R01-010</td><td>Candado de 20 mm</td><td class="n">3 und</td><td class="n">3</td>
+            <td><span class="marca-est est-ok">completo</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="pie">Siempre dentro de <code>.tabla-caja</code>, que le da su propio desplazamiento
+    horizontal. Así una tabla ancha no empuja la página entera hacia el costado en el celular.</p>
+</div>
+
+<h2>Avisos</h2>
+<div class="muestra">
+  <div class="aviso"><p>Lo que falte queda pendiente en el consolidado y <b>no</b> entra al almacén.</p></div>
+  <p class="pie">Explican una consecuencia, no adornan. Si un aviso no dice qué va a pasar,
+    sobra.</p>
+</div>
+
+<h2>Panel izquierdo</h2>
+<div class="muestra">
+  <div style="max-width:236px;background:var(--panel);border:1px solid var(--linea);
+              border-radius:var(--r-m);padding:12px">
+    <div id="quien" style="margin-bottom:8px"><small>ALMACENERO</small><b>Joshua Amasifuén</b></div>
+    <div id="sombreros" style="display:flex;margin-bottom:8px">
+      <button type="button" class="on">Almacén</button>
+      <button type="button">Administrar</button>
+    </div>
+    <button class="opcion" aria-current="true"><span class="ic"></span><b>Ingreso</b>
+      <span class="glob">2</span></button>
+    <button class="opcion"><span class="ic"></span><b>Salida</b></button>
+  </div>
+  <p class="pie">El interruptor <b>Almacén / Administrar</b> solo aparece en la cuenta del dueño.
+    El globo rojo cuenta lo que espera acción.</p>
+</div>
+
+<h2>Portada</h2>
+<div class="muestra">
+  <div class="puestos" style="max-width:520px">
+    <button class="puesto destacado"><span class="ic"></span>
+      <span><b>Almacenero</b><small>Recibe, entrega, presta y lleva el kardex</small></span></button>
+  </div>
+  <p class="pie">Los botones de puesto llevan su ícono y una línea que dice qué hace ese cargo.
+    El de administrador no está: ese se recibe por fotocheck, no se elige.</p>
+</div>
+
+</div>
+</body>
+</html>

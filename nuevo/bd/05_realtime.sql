@@ -1,5 +1,5 @@
 -- =====================================================================
---  ALMACÉN CPQ · TIEMPO REAL Y SINCRONIZACIÓN
+--  PASO 5 · TIEMPO REAL Y SINCRONIZACIÓN
 --
 --  Lo que hace que el ingreso que usted registra en el almacén aparezca
 --  en el celular de la Administradora de Obra sin que ella recargue nada.
@@ -54,7 +54,7 @@ comment on function cambios_desde is
    ya tiene, incluidas las que llevan lápida, para que borre las suyas.';
 
 create table if not exists sync_marcas (
-  usuario_id  uuid not null references usuarios(id) on delete cascade,
+  usuario_id  uuid not null references perfiles(id) on delete cascade,
   dispositivo text not null,
   tabla       text not null,
   version     bigint not null default 0,

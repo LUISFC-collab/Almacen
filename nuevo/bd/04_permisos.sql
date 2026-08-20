@@ -1,5 +1,5 @@
 -- =====================================================================
---  ALMACÉN CPQ · PERMISOS POR PUESTO  (Row Level Security)
+--  PASO 4 · PERMISOS POR PUESTO  (Row Level Security)
 --
 --  Esconder un botón no es un permiso. Cualquiera con el enlace abre la
 --  consola del navegador y llama a la API igual. Estas reglas corren en
@@ -9,19 +9,11 @@
 --  Ejecutar después de 02_triggers.sql
 -- =====================================================================
 
-create or replace function mi_puesto()
-returns puesto_app language sql stable security definer as
-$$ select puesto from usuarios where auth_uid = auth.uid() and activo and eliminado_en is null $$;
 
-create or replace function yo()
-returns uuid language sql stable security definer as
-$$ select id from usuarios where auth_uid = auth.uid() $$;
 
-create or replace function soy(variadic p puesto_app[])
-returns boolean language sql stable as $$ select mi_puesto() = any(p) $$;
 
 do $$ declare t text; begin
-  foreach t in array array['usuarios','unidades','unidad_alias','consolidado','materiales',
+  foreach t in array array['perfiles','unidades','unidad_alias','consolidado','materiales',
     'requerimientos','requerimiento_items','guias','guia_lineas','herramientas',
     'prestamos','movimientos','correlativos','sync_cola'] loop
     execute format('alter table %I enable row level security; alter table %I force row level security;', t, t);
@@ -115,19 +107,6 @@ create policy pre_ver on prestamos for select using (soy('almacenero','obra','je
 create policy pre_escribir on prestamos for all
   using (soy('almacenero','obra','admin')) with check (soy('almacenero','obra','admin'));
 
--- ---------------------------------------------------------------------
---  USUARIOS
--- ---------------------------------------------------------------------
-create policy usu_ver on usuarios for select
-  using (soy('admin','obra','jefatura') or auth_uid = auth.uid());
-create policy usu_alta on usuarios for insert with check (true);
-create policy usu_editarme on usuarios for update
-  using (auth_uid = auth.uid() or soy('admin'))
-  with check (soy('admin') or (auth_uid = auth.uid()
-              and puesto = (select puesto from usuarios where auth_uid = auth.uid())));
-comment on policy usu_editarme on usuarios is
-  'Cada uno corrige su nombre o su celular, pero no puede ascenderse solo: el puesto
-   solo lo cambia el administrador.';
 
 -- ---------------------------------------------------------------------
 --  CORRELATIVOS Y COLA

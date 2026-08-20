@@ -1,0 +1,54 @@
+/* =====================================================================
+   ALMACÉN CPQ · 1. BASE
+   Los colores, el tipo de letra y el fondo. Todo lo demás se apoya aquí.
+
+   Los colores viven como variables para que cambiarlos sea tocar un solo
+   sitio. Y están declarados tres veces: el juego claro, el oscuro para
+   quien tenga el celular en modo noche, y el oscuro forzado. Si un color
+   se declarara solo dentro del bloque oscuro, en modo claro no existiría
+   y se vería texto de un tema sobre el fondo del otro.
+   ===================================================================== */
+
+:root{
+    --azul:#1B4B8F; --azul-osc:#123566; --azul-suave:#DCE6F5;
+    --amarillo:#F5B70A; --sobre-amarillo:#3D2E00;
+    --verde:#1B7A4C; --verde-suave:#E0EFE7;
+    --rojo:#B4232A; --rojo-suave:#FBE6E6;
+    --ambar:#B87503; --ambar-suave:#FBEBCE;
+    --fondo:#EBEFF5; --panel:#FFFFFF; --sup2:#F4F7FB;
+    --linea:#D5DDE9; --linea-fuerte:#9AA7B8;
+    --tinta:#141A23; --tinta2:#5A6577; --tinta3:#8A94A3;
+    --r-s:8px; --r-m:12px; --r-l:18px;
+    --sombra:0 1px 2px rgba(20,26,35,.05), 0 8px 22px -14px rgba(20,26,35,.28);
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --azul:#7FA7E3; --azul-osc:#A9C4EE; --azul-suave:#1C2A44;
+    --amarillo:#F5B70A; --sobre-amarillo:#2A1F00;
+    --verde:#63C591; --verde-suave:#122B20;
+    --rojo:#E77B7F; --rojo-suave:#33191A;
+    --ambar:#E5A73A; --ambar-suave:#33260B;
+    --fondo:#0E131A; --panel:#171E27; --sup2:#202834;
+    --linea:#2C3543; --linea-fuerte:#495566;
+    --tinta:#E7ECF4; --tinta2:#93A0B2; --tinta3:#6D7A8B;
+    --sombra:0 1px 2px rgba(0,0,0,.42), 0 10px 26px -14px rgba(0,0,0,.7);
+  }}
+  :root[data-theme="dark"]{
+    --azul:#7FA7E3; --azul-osc:#A9C4EE; --azul-suave:#1C2A44;
+    --amarillo:#F5B70A; --sobre-amarillo:#2A1F00;
+    --verde:#63C591; --verde-suave:#122B20;
+    --rojo:#E77B7F; --rojo-suave:#33191A;
+    --ambar:#E5A73A; --ambar-suave:#33260B;
+    --fondo:#0E131A; --panel:#171E27; --sup2:#202834;
+    --linea:#2C3543; --linea-fuerte:#495566;
+    --tinta:#E7ECF4; --tinta2:#93A0B2; --tinta3:#6D7A8B;
+    --sombra:0 1px 2px rgba(0,0,0,.42), 0 10px 26px -14px rgba(0,0,0,.7);
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:var(--fondo); color:var(--tinta);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Arial,sans-serif;
+    font-size:15px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  .marco{ display:flex; min-height:100dvh; }

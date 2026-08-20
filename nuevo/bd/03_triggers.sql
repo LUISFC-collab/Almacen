@@ -1,5 +1,5 @@
 -- =====================================================================
---  ALMACÉN CPQ · DISPARADORES Y VALIDACIÓN
+--  PASO 3 · DISPARADORES Y VALIDACIÓN
 --
 --  Lo que no puede quedar en manos del celular vive aquí. Las validaciones
 --  del navegador se saltan abriendo la consola, y dos celulares sin señal
@@ -19,13 +19,13 @@ begin
   new.actualizado_en := now();
   new.version := coalesce(old.version, 0) + 1;
   if to_jsonb(new) ? 'actualizado_por' and auth.uid() is not null then
-    new.actualizado_por := (select id from usuarios where auth_uid = auth.uid());
+    new.actualizado_por := (select id from perfiles where id = auth.uid());
   end if;
   return new;
 end $$;
 
 do $$ declare t text; begin
-  foreach t in array array['usuarios','consolidado','materiales','requerimientos',
+  foreach t in array array['perfiles','consolidado','materiales','requerimientos',
     'requerimiento_items','guias','guia_lineas','herramientas','prestamos'] loop
     execute format('drop trigger if exists trg_sellar on %I;
       create trigger trg_sellar before update on %I
@@ -50,7 +50,7 @@ begin
 end $$;
 
 do $$ declare t text; begin
-  foreach t in array array['usuarios','consolidado','materiales','requerimientos',
+  foreach t in array array['perfiles','consolidado','materiales','requerimientos',
     'requerimiento_items','guias','guia_lineas','herramientas','prestamos'] loop
     execute format('drop trigger if exists trg_lapida on %I;
       create trigger trg_lapida before delete on %I
@@ -82,7 +82,7 @@ create or replace function update_add_stock(
   p_idempotencia text default null
 ) returns movimientos
 language plpgsql security definer as $$
-declare m materiales%rowtype; mov movimientos%rowtype; u usuarios%rowtype;
+declare m materiales%rowtype; mov movimientos%rowtype; u perfiles%rowtype;
 begin
   if p_delta = 0 then raise exception 'El movimiento no puede ser de cero.'; end if;
 
@@ -92,7 +92,7 @@ begin
     if found then return mov; end if;
   end if;
 
-  select * into u from usuarios where auth_uid = auth.uid();
+  select * into u from perfiles where id = auth.uid();
 
   -- el bloqueo de fila es lo que serializa a los dos almaceneros
   select * into m from materiales where id = p_material_id for update;
@@ -185,10 +185,10 @@ for each row execute function fn_correlativo_guia();
 -- =====================================================================
 create or replace function fn_flujo_pedido()
 returns trigger language plpgsql as $$
-declare quien usuarios%rowtype;
+declare quien perfiles%rowtype;
 begin
   if new.estado = old.estado then return new; end if;
-  select * into quien from usuarios where auth_uid = auth.uid();
+  select * into quien from perfiles where id = auth.uid();
 
   if new.estado = 'en_logistica' and quien.puesto not in ('obra','admin') then
     raise exception 'Solo la Administradora de Obra pasa los pedidos a logística.';

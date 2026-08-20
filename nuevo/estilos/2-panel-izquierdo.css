@@ -1,0 +1,112 @@
+/* =====================================================================
+   ALMACÉN CPQ · 2. PANEL IZQUIERDO
+   El riel con el puesto de quien entró y sus tareas.
+
+   En la computadora es una columna fija a la izquierda. Por debajo de
+   900 px se convierte en una fila de pastillas arriba, porque una
+   columna de 230 px en un celular no deja sitio para trabajar.
+   ===================================================================== */
+
+/* ---------- panel izquierdo ---------- */
+  .riel{
+    width:230px; flex:none; background:var(--panel); border-right:1px solid var(--linea);
+    display:flex; flex-direction:column; padding:16px 12px calc(14px + env(safe-area-inset-bottom));
+    position:sticky; top:0; height:100dvh; overflow-y:auto;
+  }
+  .riel .marca{ padding:0 6px 12px; }
+  .riel .marca b{ display:block; font-size:15px; font-weight:660; letter-spacing:-.015em; }
+  .riel .marca small{ display:block; font-size:11px; color:var(--tinta2); }
+  #caja-cargo{ background:var(--azul-suave); border-radius:var(--r-m); padding:11px 12px; margin-bottom:4px; }
+  #caja-cargo > span{ color:var(--azul-osc); }
+  #caja-cargo select{ background:var(--panel); border-color:var(--azul); font-weight:620;
+    font-size:14.5px; color:var(--azul-osc); }
+  .riel .rotulo{ font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--tinta3); padding:12px 6px 6px; }
+  .opcion{
+    appearance:none; border:0; width:100%; font:inherit; text-align:left; cursor:pointer;
+    background:transparent; color:var(--tinta); border-radius:var(--r-m);
+    padding:10px 11px; display:flex; align-items:center; gap:10px; margin-bottom:2px;
+    min-height:44px;
+  }
+  .opcion:hover{ background:var(--sup2); }
+  .opcion:focus-visible{ outline:3px solid var(--azul); outline-offset:-2px; }
+  .opcion .ic{ width:28px; height:28px; border-radius:8px; flex:none; display:flex;
+    align-items:center; justify-content:center; background:var(--sup2); color:var(--tinta2); }
+  .opcion .ic svg{ width:16px; height:16px; }
+  .opcion b{ flex:1; min-width:0; font-size:13.5px; font-weight:600; letter-spacing:-.01em; }
+  .opcion .glob{ font-size:11px; font-weight:700; background:var(--rojo); color:#fff;
+    border-radius:99px; padding:1px 7px; font-variant-numeric:tabular-nums; }
+  .opcion[aria-current="true"]{ background:var(--azul-suave); }
+  .opcion[aria-current="true"] b{ color:var(--azul-osc); }
+  .opcion[aria-current="true"] .ic{ background:var(--azul); color:#fff; }
+  :root[data-theme="dark"] .opcion[aria-current="true"] .ic,
+  :root:not([data-theme="light"]) .opcion[aria-current="true"] .ic{ color:#0E131A; }
+
+  /* ---------- quién soy ---------- */
+  #quien{ background:var(--azul-suave); border-radius:var(--r-m); padding:11px 12px; margin-bottom:6px; }
+  #sombreros{ display:flex; gap:4px; background:var(--sup2); border-radius:99px;
+    padding:3px; margin-bottom:8px; }
+  #sombreros button{ appearance:none; border:0; flex:1; font:inherit; cursor:pointer;
+    background:transparent; color:var(--tinta2); font-size:11.5px; font-weight:620;
+    padding:7px 4px; border-radius:99px; min-height:36px; }
+  #sombreros button.on{ background:var(--panel); color:var(--azul-osc);
+    box-shadow:0 1px 2px rgba(20,26,35,.08); }
+  #quien small{ display:block; font-size:9.5px; font-weight:700; letter-spacing:.09em;
+    text-transform:uppercase; color:var(--azul-osc); opacity:.75; }
+  #quien b{ display:block; font-size:14px; font-weight:660; color:var(--azul-osc);
+    letter-spacing:-.012em; margin-top:1px; }
+  #salir{ margin-top:auto; padding-top:12px; }
+  #salir button{ appearance:none; border:0; width:100%; font:inherit; cursor:pointer;
+    background:transparent; color:var(--tinta2); font-size:12.5px; font-weight:600;
+    padding:10px; border-radius:var(--r-m); min-height:42px; }
+  #salir button:hover{ background:var(--sup2); color:var(--tinta); }
+
+  /* ---------- portada de acceso ---------- */
+  #portada{ position:fixed; inset:0; z-index:80; background:var(--fondo);
+    overflow-y:auto; display:none; padding:0 18px calc(30px + env(safe-area-inset-bottom)); }
+  #portada.ver{ display:block; }
+  #portada .centro{ max-width:760px; margin:0 auto; padding-top:calc(38px + env(safe-area-inset-top)); }
+  #portada h1{ margin:0 0 4px; font-size:clamp(23px,6vw,30px); font-weight:680; letter-spacing:-.022em; }
+  #portada p.sub{ margin:0 0 26px; color:var(--tinta2); font-size:14.5px; }
+  .puestos{ display:grid; grid-template-columns:1fr; gap:11px; }
+  @media (min-width:620px){ .puestos{ grid-template-columns:1fr 1fr; } }
+  .puesto{ appearance:none; border:0; font:inherit; text-align:left; cursor:pointer;
+    background:var(--panel); color:var(--tinta); border-radius:var(--r-l);
+    box-shadow:var(--sombra); padding:16px; display:flex; align-items:center; gap:13px;
+    min-height:78px; transition:transform .13s ease; }
+  .puesto:active{ transform:scale(.985); }
+  .puesto:focus-visible{ outline:3px solid var(--azul); outline-offset:2px; }
+  .puesto .ic{ width:46px; height:46px; border-radius:13px; flex:none; display:flex;
+    align-items:center; justify-content:center; background:var(--azul-suave); color:var(--azul); }
+  .puesto .ic svg{ width:23px; height:23px; }
+  .puesto b{ display:block; font-size:15.5px; font-weight:650; letter-spacing:-.014em; }
+  .puesto small{ display:block; font-size:12.5px; color:var(--tinta2); line-height:1.4; margin-top:1px; }
+  .acceso{ background:var(--panel); border-radius:var(--r-l); box-shadow:var(--sombra);
+    padding:18px; margin-bottom:14px; }
+  .acceso h3{ margin:0 0 13px; font-size:15.5px; font-weight:650; letter-spacing:-.012em; }
+  .acceso .err{ margin:9px 0 0; font-size:12.5px; color:var(--rojo); min-height:17px; }
+  .rotulo-demo{ font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--tinta3); margin:24px 0 10px; }
+  .puesto.destacado .ic{ background:var(--amarillo); color:var(--sobre-amarillo); }
+  .puesto.admin{ grid-column:1 / -1; background:var(--azul); }
+  .puesto.admin b, .puesto.admin small{ color:#fff; }
+  .puesto.admin small{ opacity:.82; }
+  .puesto.admin .ic{ background:rgba(255,255,255,.18); color:#fff; }
+  /* en oscuro el azul del botón se aclara, así que la tinta se invierte.
+     Va dentro de su consulta de medios: si no, teñiría también el tema claro. */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .puesto.admin b,
+    :root:not([data-theme="light"]) .puesto.admin small{ color:#0E131A; }
+    :root:not([data-theme="light"]) .puesto.admin .ic{ background:rgba(0,0,0,.16); color:#0E131A; }
+  }
+  :root[data-theme="dark"] .puesto.admin b,
+  :root[data-theme="dark"] .puesto.admin small{ color:#0E131A; }
+  :root[data-theme="dark"] .puesto.admin .ic{ background:rgba(0,0,0,.16); color:#0E131A; }
+
+  #banda{ display:none; background:var(--amarillo); color:var(--sobre-amarillo);
+    padding:9px 20px; font-size:13px; font-weight:620;
+    align-items:center; gap:11px; }
+  #banda.ver{ display:flex; }
+  #banda button{ appearance:none; border:0; font:inherit; cursor:pointer; margin-left:auto;
+    background:var(--sobre-amarillo); color:var(--amarillo); border-radius:99px;
+    padding:7px 14px; font-size:12.5px; font-weight:650; min-height:36px; }

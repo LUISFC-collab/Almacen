@@ -1,31 +1,18 @@
 -- =====================================================================
---  ALMACÉN CPQ · COLUMBITO · ESQUEMA
---  Para la app de dos paneles (la simple, no la grande de 25 tablas)
+--  ALMACÉN CPQ · COLUMBITO
+--  PASO 2 · LAS TABLAS DEL ALMACÉN
 --
---  PostgreSQL 15+ · probado sobre Supabase
---  Orden: 01_esquema → 02_triggers → 03_permisos_rls → 04_realtime → 05_datos
+--  Los perfiles y el acceso ya quedaron en 01_acceso.sql. Aquí van las
+--  tablas del trabajo: consolidado, materiales, pedidos, guías,
+--  herramientas y kardex.
 --
---  Once tablas, ni una más. Cada una lleva:
+--  Cada tabla lleva:
 --     eliminado_en  → la lápida: nada se borra de verdad
 --     version       → sube en cada cambio; sirve para traer solo lo nuevo
 --     actualizado_en / actualizado_por
+--
+--  Ejecutar después de 01_acceso.sql
 -- =====================================================================
-
-create extension if not exists "pgcrypto";
-create extension if not exists "unaccent";
-create extension if not exists "pg_trgm";
-
--- unaccent() de fábrica no es inmutable y Postgres la exige así para
--- columnas generadas. Con esto «válvula» y «valvula» son el mismo material.
-create or replace function sin_tildes(t text)
-returns text language sql immutable parallel safe as
-$$ select lower(public.unaccent('public.unaccent', coalesce(t,''))) $$;
-
-do $$ begin
-  create type puesto_app as enum
-    ('almacenero','obra','jefatura','compras','supervisor','capataz','admin');
-exception when duplicate_object then null; end $$;
-
 do $$ begin
   create type estado_req as enum
     ('pendiente','en_logistica','aprobado','comprado','despachado','cerrado');
@@ -34,36 +21,6 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   create type tipo_mov as enum ('ingreso','salida','ajuste');
 exception when duplicate_object then null; end $$;
-
--- =====================================================================
---  1. QUIÉN ENTRA
--- =====================================================================
-create table if not exists usuarios (
-  id              uuid primary key default gen_random_uuid(),
-  fotocheck       text not null,
-  nombre          text not null,
-  celular         text,
-  puesto          puesto_app not null,
-  activo          boolean not null default true,
-  auth_uid        uuid unique,               -- lo enlaza con el acceso de Supabase
-  ultimo_acceso   timestamptz,
-  creado_en       timestamptz not null default now(),
-  actualizado_en  timestamptz not null default now(),
-  actualizado_por uuid,
-  eliminado_en    timestamptz,
-  version         bigint not null default 1,
-
-  constraint usuarios_fotocheck_unico unique (fotocheck),
-  constraint usuarios_fotocheck_ok check (fotocheck ~ '^[0-9]{3,}$')
-);
-comment on column usuarios.fotocheck is
-  'El número del fotocheck es el usuario. El puesto queda amarrado a la cuenta:
-   nadie elige con qué puesto entra.';
-comment on table usuarios is
-  'La contraseña NO va aquí. La maneja el servicio de autenticación, que guarda
-   solo su huella. Guardarla en una columna sería regalarla ante cualquier fuga.';
-
-create index if not exists ix_usuarios_vivos on usuarios (puesto) where eliminado_en is null;
 
 -- =====================================================================
 --  2. UNIDADES DE MEDIDA
@@ -112,7 +69,7 @@ create table if not exists consolidado (
   adicional       boolean not null default false,
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now(),
-  actualizado_por uuid references usuarios(id),
+  actualizado_por uuid references perfiles(id),
   eliminado_en    timestamptz,
   version         bigint not null default 1,
 
@@ -143,7 +100,7 @@ create table if not exists materiales (
   consolidado_id  uuid references consolidado(id),
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now(),
-  actualizado_por uuid references usuarios(id),
+  actualizado_por uuid references perfiles(id),
   eliminado_en    timestamptz,
   version         bigint not null default 1,
 
@@ -166,14 +123,14 @@ create table if not exists requerimientos (
   codigo           text not null,
   fecha            date not null default current_date,
   solicitante      text not null,
-  levantado_por    uuid references usuarios(id),
+  levantado_por    uuid references perfiles(id),
   area             text,
   frente           text,
   estado           estado_req not null default 'pendiente',
   registrado_en    timestamptz not null default now(),
   creado_en        timestamptz not null default now(),
   actualizado_en   timestamptz not null default now(),
-  actualizado_por  uuid references usuarios(id),
+  actualizado_por  uuid references perfiles(id),
   eliminado_en     timestamptz,
   version          bigint not null default 1,
 
@@ -226,10 +183,10 @@ create table if not exists guias (
   motivo          text default 'OTROS',
   numero_sunat    text,
   estado          text not null default 'en_camino',
-  emitida_por     uuid references usuarios(id),
+  emitida_por     uuid references perfiles(id),
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now(),
-  actualizado_por uuid references usuarios(id),
+  actualizado_por uuid references perfiles(id),
   eliminado_en    timestamptz,
   version         bigint not null default 1,
 
@@ -277,7 +234,7 @@ create table if not exists herramientas (
   estado          text not null default 'disponible',
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now(),
-  actualizado_por uuid references usuarios(id),
+  actualizado_por uuid references perfiles(id),
   eliminado_en    timestamptz,
   version         bigint not null default 1,
 
@@ -294,8 +251,8 @@ create table if not exists prestamos (
   devolucion_pactada date,
   retorno            timestamptz,
   dias_retraso       int,
-  entregado_por      uuid references usuarios(id),
-  recibido_por       uuid references usuarios(id),
+  entregado_por      uuid references perfiles(id),
+  recibido_por       uuid references perfiles(id),
   creado_en          timestamptz not null default now(),
   actualizado_en     timestamptz not null default now(),
   eliminado_en       timestamptz,
@@ -331,7 +288,7 @@ create table if not exists movimientos (
   requerimiento_id uuid references requerimientos(id),
   observaciones   text,
   idempotencia    text unique,
-  usuario_id      uuid references usuarios(id),
+  usuario_id      uuid references perfiles(id),
   anula_a         uuid references movimientos(id),
   creado_en       timestamptz not null default now(),
 
@@ -354,7 +311,7 @@ create index if not exists ix_mov_fecha on movimientos (fecha desc);
 create table if not exists sync_cola (
   id            uuid primary key default gen_random_uuid(),
   idempotencia  text not null unique,
-  usuario_id    uuid references usuarios(id),
+  usuario_id    uuid references perfiles(id),
   tabla         text not null,
   operacion     text not null,          -- insert | update_add | tombstone
   carga         jsonb not null,
