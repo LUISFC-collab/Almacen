@@ -661,7 +661,7 @@ function semilla(){
        —lo mismo que hace con las que se crean a mano—; cámbielas cuando
        Supabase esté conectado y las guarde cifradas. */
     usuarios:[
-      {id:uid(), nombre:"Joshua Amasifuén", cel:"", fc:"1352992", clave:"12345",
+      {id:uid(), nombre:"Joshua Amasifuén", cel:"", fc:"1352992", clave:"Joshua7280",
        puesto:"almacenero", creado:new Date().toISOString()},
       {id:uid(), nombre:"Administrador CPQ", cel:"", fc:"1332751", clave:"12345",
        puesto:"admin", creado:new Date().toISOString()}
@@ -705,12 +705,16 @@ function guardar(){ try{ localStorage.setItem(CLAVE, JSON.stringify(db)); }catch
     db.consolidado = fresca.consolidado;
     cambio = true;
   }
-  /* Las cuentas de administración se agregan si faltan; a nadie se le pisa
-     la suya, y si ya se cambió una contraseña, se deja como está. */
+  /* Las dos cuentas de administración se agregan si faltan. Si ya estaban
+     pero con otra contraseña, se corrige: la página no tiene pantalla para
+     cambiarla, así que la única que puede diferir es la que quedó guardada
+     de una versión anterior. A las cuentas creadas a mano no se las toca. */
   for(i = 0; i < fresca.usuarios.length; i++){
     var f = fresca.usuarios[i];
-    var hay = db.usuarios.some(function(u){ return u.fc === f.fc; });
-    if(!hay){ db.usuarios.push(f); cambio = true; }
+    var ya = null, j;
+    for(j = 0; j < db.usuarios.length; j++) if(db.usuarios[j].fc === f.fc) ya = db.usuarios[j];
+    if(!ya){ db.usuarios.push(f); cambio = true; }
+    else if(ya.clave !== f.clave){ ya.clave = f.clave; cambio = true; }
   }
   if(cambio) guardar();
 })();
