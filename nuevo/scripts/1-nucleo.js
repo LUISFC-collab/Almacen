@@ -663,7 +663,7 @@ function semilla(){
     usuarios:[
       {id:uid(), nombre:"Joshua Amasifuén", cel:"", fc:"1352992", clave:"Joshua7280",
        puesto:"almacenero", creado:new Date().toISOString()},
-      {id:uid(), nombre:"Administrador CPQ", cel:"", fc:"1332751", clave:"12345",
+      {id:uid(), nombre:"Luis", cel:"", fc:"1332751", clave:"Lu1332751",
        puesto:"admin", creado:new Date().toISOString()}
     ],
     requerimientos:[],
@@ -719,9 +719,13 @@ function asegurarAdmins(){
     var f = fresca.usuarios[i], ya = null;
     for(j = 0; j < db.usuarios.length; j++) if(db.usuarios[j].fc === f.fc) ya = db.usuarios[j];
     if(!ya){ db.usuarios.push(f); cambio = true; }
-    /* la página no tiene pantalla para cambiar contraseñas: si la guardada
-       difiere de la sembrada es que quedó de una versión anterior */
-    else if(ya.clave !== f.clave){ ya.clave = f.clave; cambio = true; }
+    else {
+      /* la página no tiene pantalla para cambiar contraseñas ni nombres de
+         estas dos cuentas: si lo guardado difiere de lo sembrado es que
+         quedó de una versión anterior, y se pone al día */
+      if(ya.clave !== f.clave){ ya.clave = f.clave; cambio = true; }
+      if(ya.nombre !== f.nombre){ ya.nombre = f.nombre; cambio = true; }
+    }
   }
   return cambio;
 }
