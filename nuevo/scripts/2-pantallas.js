@@ -245,6 +245,127 @@ function siguienteEstado(r){
   if(cargo === "jefatura" && r.estado === "en_logistica") return "aprobado";
   return null;
 }
+/* La Administradora de Obra corrige lo que le llega: el supervisor pide
+   "cemento" y son 40 bolsas, o se equivocó de frente. Lo hace sobre el
+   pedido, sin devolvérselo y sin rehacerlo.
+
+   Se puede editar mientras el material no se haya comprado. Después no:
+   lo comprado ya se pagó y lo entregado ya salió del almacén, así que
+   cambiar el pedido dejaría el kardex diciendo una cosa y el pedido otra.
+   El administrador de la app puede editar siempre, para arreglar líos. */
+function puedeEditarReq(r){
+  if(cargo === "admin") return true;
+  if(cargo !== "obra") return false;
+  return r.estado === "pendiente" || r.estado === "en_logistica";
+}
+
+var editando = null;      /* id del requerimiento abierto en el editor */
+var itemsEdit = [];       /* copia de trabajo: nada se toca hasta guardar */
+
+function abrirEditor(id){
+  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  editando = id;
+  itemsEdit = r.items.map(function(i){
+    return {desc:i.desc, und:i.und || "und", cant:i.cant, sol:i.sol || "", frente:i.frente || "", obs:i.obs || ""};
+  });
+  VISTA.revisar();
+}
+
+function cerrarEditor(){ editando = null; itemsEdit = []; VISTA.revisar(); }
+
+function filaEditor(r){
+  return '<tr><td colspan="7" style="background:var(--sup2);padding:14px">' +
+    '<div class="rejilla dos" style="margin-bottom:10px">' +
+      '<label class="campo"><span>Fecha del pedido</span>' +
+        '<input type="date" id="ed-fecha" value="' + esc(r.fecha) + '"></label>' +
+      '<label class="campo"><span>Área</span>' +
+        '<input id="ed-area" value="' + esc(r.area || "") + '"></label>' +
+    "</div>" +
+    '<div class="tabla-caja"><table><thead><tr>' +
+      "<th>N°</th><th>Descripción</th><th>Und</th><th class='n'>Cantidad</th>" +
+      "<th>Solicitante</th><th>Lugar / frente</th><th>Observaciones</th><th></th>" +
+    "</tr></thead><tbody>" +
+    itemsEdit.map(function(it, i){
+      return "<tr><td class='n' style='color:var(--tinta3)'>" + (i + 1) + "</td>" +
+        '<td style="min-width:180px"><input data-e="' + i + '" data-k="desc" value="' + esc(it.desc) + '"></td>' +
+        '<td style="width:140px"><select data-e="' + i + '" data-k="und">' + opcionesUnidad(it.und || "und") + "</select></td>" +
+        '<td style="width:96px"><input class="n" type="number" min="0" step="0.01" data-e="' + i + '" data-k="cant" value="' + esc(it.cant) + '"></td>' +
+        '<td style="min-width:130px"><input data-e="' + i + '" data-k="sol" value="' + esc(it.sol) + '"></td>' +
+        '<td style="min-width:130px"><input data-e="' + i + '" data-k="frente" value="' + esc(it.frente) + '"></td>' +
+        '<td style="min-width:150px"><input data-e="' + i + '" data-k="obs" value="' + esc(it.obs) + '"></td>' +
+        '<td><button class="bt chico" type="button" data-quita-e="' + i + '">Quitar</button></td></tr>';
+    }).join("") + "</tbody></table></div>" +
+    '<div class="botones" style="margin-top:11px">' +
+      '<button class="bt sec" type="button" id="ed-add">Agregar material</button>' +
+      '<button class="bt pri" type="button" id="ed-guardar">Guardar cambios</button>' +
+      '<button class="bt" type="button" id="ed-cancelar">Cancelar</button>' +
+    "</div></td></tr>";
+}
+
+function engancharEditor(){
+  if(!editando) return;
+  var z = $("zona");
+
+  var ins = z.querySelectorAll("[data-e][data-k]"), i;
+  for(i = 0; i < ins.length; i++){
+    var ev = ins[i].tagName === "SELECT" ? "change" : "input";
+    ins[i].addEventListener(ev, function(){
+      itemsEdit[+this.dataset.e][this.dataset.k] = this.value;
+    });
+  }
+  var qs = z.querySelectorAll("[data-quita-e]");
+  for(i = 0; i < qs.length; i++) qs[i].addEventListener("click", function(){
+    itemsEdit.splice(+this.dataset.quitaE, 1);
+    VISTA.revisar();
+  });
+  $("ed-add").addEventListener("click", function(){
+    itemsEdit.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
+    VISTA.revisar();
+  });
+  $("ed-cancelar").addEventListener("click", cerrarEditor);
+  $("ed-guardar").addEventListener("click", guardarEdicion);
+}
+
+function guardarEdicion(){
+  var r = db.requerimientos.filter(function(x){ return x.id === editando; })[0];
+  if(!r) return cerrarEditor();
+
+  var buenos = itemsEdit.filter(function(i){ return String(i.desc).trim() && num(i.cant) > 0; });
+  if(!buenos.length) return aviso("Deje al menos un material con su cantidad.");
+
+  var sols = [], frentes = [];
+  buenos.forEach(function(i){
+    var q = String(i.sol || "").trim(), f = String(i.frente || "").trim();
+    if(q && sols.indexOf(q) < 0) sols.push(q);
+    if(f && frentes.indexOf(f) < 0) frentes.push(f);
+  });
+  if(!sols.length) return aviso("Escriba quién lo pide, al menos en un punto.");
+
+  /* Se deshace lo que este pedido le había sumado al consolidado y se
+     vuelve a aplicar con lo corregido. Cambiar los números en el sitio
+     dejaría el consolidado con la cuenta vieja. */
+  var d = revertirDelConsolidado(r.codigo);
+
+  r.fecha = $("ed-fecha").value || r.fecha;
+  r.area = $("ed-area").value.trim();
+  r.solicitante = sols.join(" · ");
+  r.frente = frentes.join(" · ");
+  r.items = buenos.map(function(i){
+    return {desc:String(i.desc).trim(), und:i.und || "und", cant:num(i.cant),
+            sol:String(i.sol || "").trim() || sols[0], frente:String(i.frente || "").trim(),
+            obs:String(i.obs || "").trim()};
+  });
+
+  var res = aplicarAlConsolidado(r);
+  guardar();
+  var id = r.codigo;
+  cerrarEditor();
+  pintarMenu();
+  aviso(id + " actualizado · " + r.items.length + " material(es)" +
+        (res.nuevos ? " · " + res.nuevos + " nuevo(s) en el consolidado" : "") + ".");
+}
+
 VISTA.revisar = function(){
   var mios = db.requerimientos.filter(function(r){
     if(cargo === "obra") return true;
@@ -286,16 +407,21 @@ VISTA.revisar = function(){
             '<td><span class="marca-est ' + f.c + '">' + f.t + "</span></td>" +
             '<td style="white-space:nowrap">' +
               '<button class="bt chico" type="button" data-ver="' + r.id + '">Ver</button> ' +
+              (puedeEditarReq(r)
+                ? '<button class="bt chico" type="button" data-editar="' + r.id + '">Editar</button> '
+                : "") +
               (sig
                 ? '<button class="bt chico pri" type="button" data-ok="' + r.id + '">' +
                   (cargo === "obra" ? "Pasar a logística" : "Visto bueno") + "</button>"
                 : "") + "</td></tr>" +
-            '<tr data-det="' + r.id + '" style="display:none"><td colspan="6" style="background:var(--sup2)">' +
+            '<tr data-det="' + r.id + '" style="display:none"><td colspan="7" style="background:var(--sup2)">' +
               r.items.map(function(it){
                 return "· <b>" + esc(it.desc) + "</b> — " + it.cant + " " + esc(it.und) +
+                  (it.sol ? " · " + esc(it.sol) : "") +
                   (it.frente ? " · " + esc(it.frente) : "") +
                   (it.obs ? " · <i>" + esc(it.obs) + "</i>" : "");
-              }).join("<br>") + "</td></tr>";
+              }).join("<br>") + "</td></tr>" +
+            (editando === r.id ? filaEditor(r) : "");
         }).join("") + "</tbody></table></div>"
       : '<div class="vacio">No hay pedidos por revisar.</div>') +
     "</div></div>";
@@ -314,6 +440,12 @@ VISTA.revisar = function(){
     guardar(); VISTA.revisar(); pintarMenu();
     aviso(r.codigo + " · " + FLUJO[r.estado].t.toLowerCase() + ".");
   });
+
+  var es = $("zona").querySelectorAll("[data-editar]");
+  for(i=0;i<es.length;i++) es[i].addEventListener("click", function(){
+    abrirEditor(this.dataset.editar);
+  });
+  engancharEditor();
 };
 
 /* ---------- COMPRAR (Asistente) ---------- */

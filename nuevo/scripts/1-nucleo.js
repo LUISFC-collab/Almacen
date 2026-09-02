@@ -1030,7 +1030,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-d";
+  return "2026-09-02-e";
 })();
 
 function textoVersion(){
@@ -1812,28 +1812,11 @@ function guardarReq(){
   /* El consolidado es la suma de lo que pide la obra: cada supervisor
      hace el suyo, así que un pedido nuevo de algo que ya figura le suma
      al requerido, no se descuenta de lo que ya estaba previsto. */
-  var nuevos = 0, sumados = 0;
-  buenos.forEach(function(i){
-    var c = buscarConsolidado(i.desc);
-    if(c){
-      c.requerido = Math.round((num(c.requerido) + num(i.cant)) * 100) / 100;
-      c.pedidos = c.pedidos || [];
-      c.pedidos.push({req:codigo, quien:String(i.sol || "").trim() || primero, cant:num(i.cant),
-                      fecha:$("rq-fecha").value || hoy()});
-      sumados++;
-      return;
-    }
-    db.consolidado.push({id:uid(),
-      codigo:"R01-" + String(db.consolidado.length + 1).padStart(3,"0"),
-      desc:i.desc.trim(), unidad:i.und||"und", requerido:num(i.cant),
-      comprado:0, entregado:0, adicional:true,
-      pedidos:[{req:codigo, quien:String(i.sol || "").trim() || primero, cant:num(i.cant),
-                fecha:$("rq-fecha").value || hoy()}]});
-    nuevos++;
-  });
+  var reg = db.requerimientos[0];
+  var res = aplicarAlConsolidado(reg);
+  var sumados = res.sumados, nuevos = res.nuevos;
 
   guardar();
-  var reg = db.requerimientos[0];
   try{
     bajarBlob("REQUERIMIENTO_" + codigo + ".xlsx", excelRequisito(reg));
   }catch(e){ /* si el navegador no deja bajar, el pedido igual quedó guardado */ }
@@ -1901,37 +1884,68 @@ function pintarListaReq(){
        entregado nada de ellos; si ya se compró, el renglón se queda,
        porque el material está en el almacén y hay que poder verlo.
    ===================================================================== */
-function quitarRequerimiento(id){
-  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
-  if(!r) return;
-  if(!confirm("¿Quitar el requerimiento " + r.codigo + "?\n\nSe descuenta del consolidado lo que había pedido. No se puede deshacer.")) return;
+/* Lo que un requerimiento le hace al consolidado, en un solo sitio.
+   Registrar lo aplica, quitar lo deshace y editar hace las dos cosas: si
+   cada uno llevara su copia, tarde o temprano una se quedaría atrás y el
+   alcance de la obra dejaría de cuadrar con lo que la gente pidió. */
+function aplicarAlConsolidado(r){
+  var sumados = 0, nuevos = 0;
+  r.items.forEach(function(i){
+    var c = buscarConsolidado(i.desc);
+    if(c){
+      c.requerido = Math.round((num(c.requerido) + num(i.cant)) * 100) / 100;
+      c.pedidos = c.pedidos || [];
+      c.pedidos.push({req:r.codigo, quien:i.sol || r.solicitante || "", cant:num(i.cant), fecha:r.fecha});
+      sumados++;
+      return;
+    }
+    db.consolidado.push({id:uid(),
+      codigo:"R01-" + String(db.consolidado.length + 1).padStart(3,"0"),
+      desc:String(i.desc).trim(), unidad:i.und || "und", requerido:num(i.cant),
+      comprado:0, entregado:0, adicional:true,
+      pedidos:[{req:r.codigo, quien:i.sol || r.solicitante || "", cant:num(i.cant), fecha:r.fecha}]});
+    nuevos++;
+  });
+  return {sumados:sumados, nuevos:nuevos};
+}
 
+/* Devuelve al consolidado lo que este requerimiento le había sumado.
+   Los renglones que existían SOLO por él se van, salvo que ya se haya
+   comprado o entregado algo: en ese caso el material está en el almacén
+   y el renglón tiene que seguir viéndose. */
+function revertirDelConsolidado(codigo){
   var devueltos = 0, borrados = 0;
   db.consolidado = db.consolidado.filter(function(c){
     if(!c.pedidos || !c.pedidos.length) return true;
-    var mios = c.pedidos.filter(function(p){ return p.req === r.codigo; });
+    var mios = c.pedidos.filter(function(p){ return p.req === codigo; });
     if(!mios.length) return true;
 
     var suma = 0;
     mios.forEach(function(p){ suma += num(p.cant); });
     c.requerido = Math.round(Math.max(0, num(c.requerido) - suma) * 100) / 100;
-    c.pedidos = c.pedidos.filter(function(p){ return p.req !== r.codigo; });
+    c.pedidos = c.pedidos.filter(function(p){ return p.req !== codigo; });
     devueltos += suma;
 
-    /* nació de este requerimiento, nadie más lo pidió y no se movió nada */
     if(c.adicional && !c.pedidos.length && !num(c.comprado) && !num(c.entregado)){
       borrados++;
       return false;
     }
     return true;
   });
+  return {devueltos:Math.round(devueltos * 100) / 100, borrados:borrados};
+}
 
+function quitarRequerimiento(id){
+  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  if(!confirm("¿Quitar el requerimiento " + r.codigo + "?\n\nSe descuenta del consolidado lo que había pedido. No se puede deshacer.")) return;
+
+  var d = revertirDelConsolidado(r.codigo);
   db.requerimientos = db.requerimientos.filter(function(x){ return x.id !== id; });
   guardar();
   pintarListaReq();
-  aviso("Quitado " + r.codigo + ". Se devolvieron " +
-        (Math.round(devueltos * 100) / 100) + " al consolidado" +
-        (borrados ? " y se sacaron " + borrados + " renglón(es) que solo existían por él" : "") + ".");
+  aviso("Quitado " + r.codigo + ". Se devolvieron " + d.devueltos + " al consolidado" +
+        (d.borrados ? " y se sacaron " + d.borrados + " renglón(es) que solo existían por él" : "") + ".");
 }
 
 /* ---------- INGRESO ---------- */
