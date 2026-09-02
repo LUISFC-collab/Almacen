@@ -368,21 +368,20 @@ function guardarEdicion(){
 }
 
 VISTA.revisar = function(){
-  /* Obra los ve todos porque es la primera en revisarlos. El administrador
-     también: si viera solo los que ya pasaron por ella, una pantalla diría
-     tres requerimientos y esta ninguno, sin que nada explique la diferencia.
-     Logística y compras siguen viendo solo lo que Obra ya soltó, que es lo
-     correcto: lo pendiente todavía no es asunto suyo. */
-  var mios = db.requerimientos.filter(function(r){
-    if(cargo === "obra" || cargo === "admin") return true;
-    return r.estado !== "pendiente";
-  });
+  var esObra = (cargo === "obra" || cargo === "admin");
 
-  /* Las cuatro cifras que la Administradora mira cada mañana */
+  /* El pedido del día que todavía no sale, uno por proyecto. Es lo que
+     la Administradora tiene delante para revisar. */
+  var abiertos = db.requerimientos.filter(function(r){ return r.estado === "pendiente"; });
+  var salidos  = db.requerimientos.filter(function(r){ return r.estado !== "pendiente"; });
+
   var resumen = "";
   if(cargo === "obra"){
-    var porRevisar = db.requerimientos.filter(function(r){ return r.estado === "pendiente"; }).length;
-    var enLog = db.requerimientos.filter(function(r){
+    var porRevisar = 0;
+    abiertos.forEach(function(r){
+      porRevisar += r.items.filter(function(i){ return !i.validado && !i.devuelto; }).length;
+    });
+    var enLog = salidos.filter(function(r){
       return r.estado === "en_logistica" || r.estado === "aprobado"; }).length;
     var req = 0, comp = 0;
     db.consolidado.forEach(function(c){ req += c.requerido; comp += c.comprado; });
@@ -390,42 +389,51 @@ VISTA.revisar = function(){
     var pct = req ? Math.round(comp / req * 100) : 0;
     resumen = '<div class="cifras">' +
       '<div class="cifra"><b style="color:' + (porRevisar ? "var(--rojo)" : "var(--verde)") + '">' +
-        porRevisar + "</b><small>esperan su visto bueno</small></div>" +
+        porRevisar + "</b><small>materiales por validar</small></div>" +
       '<div class="cifra"><b>' + enLog + "</b><small>en manos de logística</small></div>" +
       '<div class="cifra"><b>' + falta + "</b><small>falta comprar</small></div>" +
       '<div class="cifra"><b>' + pct + '%</b><small>de la obra comprado</small></div>' +
     "</div>";
   }
 
-  $("zona").innerHTML = '<div class="vista">' + resumen + '<div class="tarjeta">' +
-    "<h2>" + (cargo === "obra" ? "Todo pedido pasa primero por usted" : "Pedidos que Obra ya revisó") + "</h2>" +
-    '<p class="nota">' + (cargo === "obra"
-      ? "Revise y páselo a logística. Nada sale de la obra sin su visto bueno."
+  var html = '<div class="vista">' + resumen;
+
+  if(esObra){
+    html += abiertos.length
+      ? abiertos.map(function(r){ return tarjetaDelDia(r); }).join("")
+      : '<div class="tarjeta"><h2>Todo pedido pasa primero por usted</h2>' +
+        '<div class="vacio">Hoy todavía no hay nada que revisar.</div></div>';
+  }
+
+  /* Lo que ya salió: para Obra es historial, para logística y compras es
+     su bandeja de entrada. */
+  var deOtros = esObra ? salidos : salidos;
+  html += '<div class="tarjeta">' +
+    "<h2>" + (esObra ? "Ya pasaron a logística" : "Pedidos que Obra ya revisó") + "</h2>" +
+    '<p class="nota">' + (esObra
+      ? "Salieron con los materiales que usted validó."
       : "Dé el visto bueno para que el asistente pueda comprar.") + "</p>" +
-    (mios.length
-      ? (cargo !== "obra" && cargo !== "admin" && db.requerimientos.length > mios.length
-          ? '<p class="nota"><b>' + (db.requerimientos.length - mios.length) +
-            "</b> más siguen esperando el visto bueno de la Administradora de Obra.</p>"
-          : "") +
-        '<div class="tabla-caja"><table><thead><tr><th>Código</th><th>Fecha</th><th>Solicitante</th>' +
+    (deOtros.length
+      ? '<div class="tabla-caja"><table><thead><tr><th>Código</th><th>Proyecto</th><th>Fecha</th>' +
         '<th class="n">Materiales</th><th>Estado</th><th></th></tr></thead><tbody>' +
-        mios.map(function(r){
+        deOtros.map(function(r){
           var f = FLUJO[r.estado] || FLUJO.pendiente;
           var sig = siguienteEstado(r);
-          return "<tr><td><b>" + esc(r.codigo) + "</b></td><td>" + fecha(r.fecha) + "</td>" +
-            "<td>" + esc(r.solicitante) + "</td><td class='n'>" + r.items.length + "</td>" +
+          var vivos = r.items.filter(function(i){ return !i.devuelto; });
+          return "<tr><td><b>" + esc(etiquetaReq(r)) + "</b></td>" +
+            "<td>" + esc(nombreProyecto(r.proyecto)) + "</td><td>" + fecha(r.fecha) + "</td>" +
+            "<td class='n'>" + vivos.length + "</td>" +
             '<td><span class="marca-est ' + f.c + '">' + f.t + "</span></td>" +
             '<td style="white-space:nowrap">' +
               '<button class="bt chico" type="button" data-ver="' + r.id + '">Ver</button> ' +
               (puedeEditarReq(r)
                 ? '<button class="bt chico" type="button" data-editar="' + r.id + '">Editar</button> '
                 : "") +
-              (sig
-                ? '<button class="bt chico pri" type="button" data-ok="' + r.id + '">' +
-                  (cargo === "obra" ? "Pasar a logística" : "Visto bueno") + "</button>"
+              (sig && !esObra
+                ? '<button class="bt chico pri" type="button" data-ok="' + r.id + '">Visto bueno</button>'
                 : "") + "</td></tr>" +
             '<tr data-det="' + r.id + '" style="display:none"><td colspan="7" style="background:var(--sup2)">' +
-              r.items.map(function(it){
+              vivos.map(function(it){
                 return "· <b>" + esc(it.desc) + "</b> — " + it.cant + " " + esc(it.und) +
                   (it.sol ? " · " + esc(it.sol) : "") +
                   (it.frente ? " · " + esc(it.frente) : "") +
@@ -433,34 +441,158 @@ VISTA.revisar = function(){
               }).join("<br>") + "</td></tr>" +
             (editando === r.id ? filaEditor(r) : "");
         }).join("") + "</tbody></table></div>"
-      : '<div class="vacio">' +
-        (db.requerimientos.length
-          ? "Los " + db.requerimientos.length + " requerimiento(s) que hay siguen esperando " +
-            "el visto bueno de la Administradora de Obra."
-          : "Todavía no hay requerimientos.") + "</div>") +
+      : '<div class="vacio">Todavía no ha salido ningún pedido.</div>') +
     "</div></div>";
-  var vs = $("zona").querySelectorAll("[data-ver]"), k;
-  for(k=0;k<vs.length;k++) vs[k].addEventListener("click", function(){
+
+  $("zona").innerHTML = html;
+  engancharRevisar();
+};
+
+/* ---------------------------------------------------------------------
+   LA TARJETA DEL PEDIDO DEL DÍA
+
+   Un renglón por material, no por supervisor: la Administradora puede
+   mandar los clavos de uno y devolverle la dimantina a otro sin que se
+   arrastren entre ellos.
+   --------------------------------------------------------------------- */
+function tarjetaDelDia(r){
+  var et = etiquetaReq(r);
+  var vivos = r.items.filter(function(i){ return !i.devuelto; });
+  var ok = vivos.filter(function(i){ return i.validado; }).length;
+
+  return '<div class="tarjeta">' +
+    "<h2>" + esc(et) + " · " + esc(nombreProyecto(r.proyecto)) + " · " + fecha(r.fecha) + "</h2>" +
+    '<div class="botones" style="align-items:center;margin:0 0 12px">' +
+      '<p class="nota" style="margin:0;flex:1;min-width:220px">' +
+        "Revise y páselo a logística. Nada sale de la obra sin su visto bueno." +
+      "</p>" +
+      '<button class="bt pri" type="button" data-enviar="' + r.id + '"' +
+        (ok ? "" : " disabled") + ">Pasar a logística</button>" +
+    "</div>" +
+    (vivos.length
+      ? '<div class="tabla-caja"><table><thead><tr>' +
+        "<th>Material</th><th class='n'>Cantidad</th><th>Solicitante</th><th>Lugar</th>" +
+        "<th>Observaciones</th><th></th></tr></thead><tbody>" +
+        vivos.map(function(it){
+          var k = r.items.indexOf(it);
+          return "<tr>" +
+            "<td><b>" + esc(it.desc) + "</b></td>" +
+            "<td class='n'>" + it.cant + " " + esc(it.und) + "</td>" +
+            "<td>" + esc(it.sol || "—") + "</td>" +
+            "<td>" + esc(it.frente || "—") + "</td>" +
+            '<td style="min-width:150px">' +
+              (it.validado
+                ? esc(it.obs || "—")
+                : '<input data-motivo="' + r.id + ':' + k + '" value="' + esc(it.motivo || "") +
+                  '" placeholder="Por qué se devuelve">') +
+            "</td>" +
+            '<td style="white-space:nowrap"><button class="bt chico ' +
+              (it.validado ? "pri" : "") + '" type="button" data-val="' + r.id + ":" + k + '">' +
+              (it.validado ? "Validado para enviar en " + esc(et) : "Validar para enviar en " + esc(et)) +
+            "</button></td></tr>";
+        }).join("") + "</tbody></table></div>" +
+        '<p class="nota" style="margin-top:10px">' +
+          "<b>" + ok + "</b> de " + vivos.length + " validado(s). " +
+          (ok < vivos.length
+            ? "Los " + (vivos.length - ok) + " que no marque vuelven a su supervisor para que los corrija."
+            : "Todo listo para salir.") +
+        "</p>"
+      : '<div class="vacio">Este pedido se quedó sin materiales.</div>') +
+    "</div>";
+}
+
+function engancharRevisar(){
+  var z = $("zona"), i;
+
+  var vs = z.querySelectorAll("[data-ver]");
+  for(i=0;i<vs.length;i++) vs[i].addEventListener("click", function(){
     var f = $("zona").querySelector('[data-det="' + this.dataset.ver + '"]');
     var abierto = f.style.display !== "none";
     f.style.display = abierto ? "none" : "";
     this.textContent = abierto ? "Ver" : "Ocultar";
   });
 
-  var bs = $("zona").querySelectorAll("[data-ok]"), i;
+  /* validar o quitar la validación de un material */
+  var vl = z.querySelectorAll("[data-val]");
+  for(i=0;i<vl.length;i++) vl[i].addEventListener("click", function(){
+    var p = this.dataset.val.split(":");
+    var r = db.requerimientos.filter(function(x){ return x.id === p[0]; })[0];
+    if(!r) return;
+    var it = r.items[+p[1]];
+    it.validado = !it.validado;
+    guardar(); subirReq(r); VISTA.revisar();
+  });
+
+  /* el motivo se guarda mientras lo escribe */
+  var mt = z.querySelectorAll("[data-motivo]");
+  for(i=0;i<mt.length;i++) mt[i].addEventListener("input", function(){
+    var p = this.dataset.motivo.split(":");
+    var r = db.requerimientos.filter(function(x){ return x.id === p[0]; })[0];
+    if(!r) return;
+    r.items[+p[1]].motivo = this.value;
+    guardar();
+  });
+
+  var en = z.querySelectorAll("[data-enviar]");
+  for(i=0;i<en.length;i++) en[i].addEventListener("click", function(){
+    pasarALogistica(this.dataset.enviar);
+  });
+
+  var bs = z.querySelectorAll("[data-ok]");
   for(i=0;i<bs.length;i++) bs[i].addEventListener("click", function(){
     var r = db.requerimientos.filter(function(x){ return x.id === this.dataset.ok; }.bind(this))[0];
     r.estado = siguienteEstado(r);
     guardar(); subirReq(r); VISTA.revisar(); pintarMenu();
-    aviso(r.codigo + " · " + FLUJO[r.estado].t.toLowerCase() + ".");
+    aviso(etiquetaReq(r) + " · " + FLUJO[r.estado].t.toLowerCase() + ".");
   });
 
-  var es = $("zona").querySelectorAll("[data-editar]");
+  var es = z.querySelectorAll("[data-editar]");
   for(i=0;i<es.length;i++) es[i].addEventListener("click", function(){
     abrirEditor(this.dataset.editar);
   });
   engancharEditor();
-};
+}
+
+/* ---------------------------------------------------------------------
+   PASAR EL PEDIDO DEL DÍA A LOGÍSTICA
+
+   Sale lo validado. Lo que no se validó no se pierde ni se compra: se
+   le devuelve al supervisor que lo pidió, con el motivo, para que lo
+   corrija y lo vuelva a mandar en el pedido de mañana.
+   --------------------------------------------------------------------- */
+function pasarALogistica(id){
+  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+
+  var vivos = r.items.filter(function(i){ return !i.devuelto; });
+  var val = vivos.filter(function(i){ return i.validado; });
+  var no  = vivos.filter(function(i){ return !i.validado; });
+
+  if(!val.length) return aviso("No ha validado ningún material. Marque al menos uno.");
+
+  if(no.length){
+    var sinMotivo = no.filter(function(i){ return !String(i.motivo || "").trim(); }).length;
+    if(!confirm(no.length + " material(es) sin validar vuelven a su supervisor para que los corrija" +
+                (sinMotivo ? ", y " + sinMotivo + " van sin motivo escrito" : "") + ".\n\n" +
+                "Salen a logística los " + val.length + " que validó. ¿Continuar?")) return;
+  }
+
+  no.forEach(function(i){
+    i.devuelto = true;
+    i.devueltoEn = new Date().toISOString();
+    /* no se compra, así que sale de la cuenta del consolidado */
+    restarDelConsolidado(r.codigo, i);
+  });
+
+  r.estado = siguienteEstado(r) || "en_logistica";
+  guardar();
+  subirReq(r);
+  VISTA.revisar();
+  pintarMenu();
+  aviso(etiquetaReq(r) + " salió a logística con " + val.length + " material(es)" +
+        (no.length ? " · " + no.length + " devuelto(s) al supervisor" : "") + ".");
+}
+
 
 /* ---------- COMPRAR (Asistente) ---------- */
 VISTA.comprar = function(){
@@ -472,7 +604,7 @@ VISTA.comprar = function(){
       ? '<div class="tabla-caja"><table><thead><tr><th>Código</th><th>Solicitante</th>' +
         '<th>Materiales</th><th></th></tr></thead><tbody>' +
         listos.map(function(r){
-          return "<tr><td><b>" + esc(r.codigo) + "</b></td><td>" + esc(r.solicitante) + "</td>" +
+          return "<tr><td><b>" + esc(etiquetaReq(r)) + "</b></td><td>" + esc(r.solicitante) + "</td>" +
             "<td>" + r.items.map(function(i){ return esc(i.desc) + " (" + i.cant + ")"; }).join(", ") + "</td>" +
             '<td><button class="bt chico pri" type="button" data-comp="' + r.id + '">Comprado</button></td></tr>';
         }).join("") + "</tbody></table></div>"
@@ -602,7 +734,7 @@ VISTA.mispedidos = function(){
         '<th>Materiales</th><th>Estado</th></tr></thead><tbody>' +
         db.requerimientos.map(function(r){
           var f = FLUJO[r.estado] || FLUJO.pendiente;
-          return "<tr><td><b>" + esc(r.codigo) + "</b></td><td>" + fecha(r.fecha) + "</td>" +
+          return "<tr><td><b>" + esc(etiquetaReq(r)) + "</b></td><td>" + fecha(r.fecha) + "</td>" +
             "<td>" + r.items.map(function(i){ return esc(i.desc); }).join(", ") + "</td>" +
             '<td><span class="marca-est ' + f.c + '">' + f.t + "</span></td></tr>";
         }).join("") + "</tbody></table></div>"
@@ -821,11 +953,15 @@ function nubeBajarYPintar(){
         var items = (porId[r.id] || []).sort(function(a,b){ return (a.orden||0)-(b.orden||0); });
         return {id:r.id, nubeId:r.id, codigo:r.codigo, fecha:r.fecha,
                 solicitante:r.solicitante, area:r.area || "", frente:r.frente || "",
-                estado:r.estado,
+                estado:r.estado, proyecto:r.proyecto || "todos",
                 items:items.map(function(i){
                   return {desc:i.descripcion, und:i.unidad, cant:Number(i.cantidad),
                           sol:i.solicitante || "", frente:i.frente || "",
-                          obs:i.observaciones || ""};
+                          obs:i.observaciones || "",
+                          validado: !!i.validado,
+                          motivo: i.motivo_devolucion || "",
+                          devuelto: !!i.devuelto_en,
+                          devueltoEn: i.devuelto_en || null};
                 })};
       });
     }

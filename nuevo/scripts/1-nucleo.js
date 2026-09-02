@@ -1872,6 +1872,15 @@ VISTA.requisito = function(){
       '<label class="campo"><span>Área</span><input id="rq-area" value="' + esc(db.area) + '"></label>' +
       '<label class="campo"><span>Fecha del pedido</span><input type="date" id="rq-fecha" value="' + hoy() + '" max="' + hoy() + '"></label>' +
     "</div>" +
+    /* Quien trabaja en un proyecto no lo elige: ya se sabe cuál es. Solo
+       lo elige quien está en todos —logística, la administración— porque
+       para esa persona sí puede ser cualquiera. */
+    (miProyecto() === "todos" && proyectosVivos().length
+      ? '<label class="campo"><span>Proyecto</span><select id="rq-proy">' +
+        proyectosVivos().map(function(p){
+          return '<option value="' + esc(p.id) + '">' + esc(p.nombre) + "</option>";
+        }).join("") + "</select></label>"
+      : "") +
     '<div class="botones"><button class="bt sec" type="button" id="rq-add">Agregar material</button>' +
     '<span class="der" id="rq-conteo"></span></div>' +
     '<div class="botones">' +
@@ -1880,7 +1889,8 @@ VISTA.requisito = function(){
     '<div class="botones"><button class="bt pri" type="button" id="rq-guardar">Registrar requerimiento</button>' +
     '<small id="rq-borrador" class="der" style="font-size:11.5px"></small></div>' +
     "</div>" +
-    '<div class="tarjeta"><h2>Requerimientos registrados</h2><div id="rq-lista"></div></div></div>';
+    '<div class="tarjeta"><h2>Requerimientos registrados</h2><div id="rq-lista"></div></div>' +
+    tarjetaDevueltos() + "</div>";
 
   $("rq-add").addEventListener("click", function(){
     itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
@@ -1893,6 +1903,24 @@ VISTA.requisito = function(){
     confirmar:"toque para cargar los renglones",
     alConfirmar:function(a){ cargarExcel(a); }});
   $("rq-guardar").addEventListener("click", guardarReq);
+  var cs = document.querySelectorAll("[data-corregir]"), ci;
+  for(ci=0; ci<cs.length; ci++) cs[ci].addEventListener("click", function(){
+    var p = this.dataset.corregir.split(":");
+    var r = db.requerimientos.filter(function(x){ return x.id === p[0]; })[0];
+    if(!r) return;
+    var it = r.items[+p[1]];
+    /* se marca corregido para que no vuelva a salir en la lista, y se
+       trae al formulario tal como estaba para que solo cambie lo que
+       haga falta */
+    it.corregido = true;
+    itemsReq = itemsReq.filter(function(x){ return String(x.desc || "").trim(); });
+    itemsReq.push({desc:it.desc, und:it.und, cant:it.cant, sol:it.sol,
+                   frente:it.frente, obs:it.obs});
+    guardar();
+    if(typeof subirReq === "function") subirReq(r);
+    VISTA.requisito();
+    aviso("«" + it.desc + "» está en el formulario. Corrija y vuelva a registrar.");
+  });
   $("rq-area").addEventListener("input", anotarBorrador);
   $("rq-fecha").addEventListener("change", anotarBorrador);
 
@@ -1950,6 +1978,118 @@ function opcionesProyecto(sel){
             ">" + esc(p.nombre) + "</option>";
   });
   return html;
+}
+
+/* =====================================================================
+   LO QUE LE DEVOLVIERON PARA CORREGIR
+
+   Un material que la Administradora no validó no se pierde: vuelve a
+   quien lo pidió, con el motivo, para que lo arregle y lo mande otra
+   vez. Sin esto el supervisor se enteraría de que su material no salió
+   solo cuando fuera a buscarlo al almacén y no estuviera.
+   ===================================================================== */
+function misDevueltos(){
+  var yo = quienSoy();
+  var todo = (cargo === "obra" || cargo === "admin" || cargo === "almacenero");
+  var lista = [];
+  db.requerimientos.forEach(function(r){
+    (r.items || []).forEach(function(it, k){
+      if(!it.devuelto || it.corregido) return;
+      if(!todo && String(it.sol || "") !== yo) return;
+      lista.push({r:r, k:k, it:it});
+    });
+  });
+  return lista;
+}
+
+function tarjetaDevueltos(){
+  var lista = misDevueltos();
+  if(!lista.length) return "";
+  return '<div class="tarjeta">' +
+    "<h2>Le devolvieron para corregir</h2>" +
+    '<p class="nota">La Administradora no los validó. Corríjalos y vuelva a mandarlos: ' +
+    "entran en el pedido de hoy.</p>" +
+    '<div class="tabla-caja"><table><thead><tr>' +
+    "<th>Material</th><th class='n'>Cantidad</th><th>Lugar</th><th>Motivo</th><th></th>" +
+    "</tr></thead><tbody>" +
+    lista.map(function(x){
+      return "<tr><td><b>" + esc(x.it.desc) + "</b></td>" +
+        "<td class='n'>" + x.it.cant + " " + esc(x.it.und) + "</td>" +
+        "<td>" + esc(x.it.frente || "—") + "</td>" +
+        '<td style="color:var(--rojo)">' + esc(x.it.motivo || "sin motivo escrito") + "</td>" +
+        '<td><button class="bt chico pri" type="button" data-corregir="' +
+          esc(x.r.id) + ":" + x.k + '">Corregir</button></td></tr>';
+    }).join("") + "</tbody></table></div></div>";
+}
+
+/* =====================================================================
+   EL REQUERIMIENTO DEL DÍA
+
+   Un REQ ya no es un pedido suelto: es el pedido del día de un proyecto.
+   Todo lo que los supervisores levanten ese día cae dentro del mismo, y
+   sale junto cuando la Administradora lo pasa a logística.
+
+   El código guardado se arma con el proyecto y la fecha, no contando
+   pedidos en cada equipo. Eso arregla de paso el choque que había: dos
+   celulares sin señal que levanten el mismo día llegan al mismo código
+   y se juntan, en vez de pisarse uno al otro.
+
+   El número que se ve —REQ-001, REQ-002— se calcula: es el puesto que
+   ocupa ese día entre los días que ese proyecto lleva pedidos. Así no
+   hace falta que nadie lleve la cuenta y no hay dos iguales.
+   ===================================================================== */
+function codigoDelDia(proy, f){
+  return String(proy || "todos").toUpperCase() + "-" + String(f).split("-").join("");
+}
+
+function miProyecto(){
+  var yo = quienSoy();
+  var u = (db.usuarios || []).filter(function(x){ return x.nombre === yo; })[0];
+  var p = u && u.proyecto;
+  if(p && p !== "todos") return p;
+  var vivos = proyectosVivos();
+  /* Quien está en "todos" —logística, la administración— no tiene un
+     proyecto propio. Si la obra tiene uno solo, es ese; si tiene varios,
+     lo elige en el formulario. */
+  return vivos.length === 1 ? vivos[0].id : (p || "todos");
+}
+
+function etiquetaReq(r){
+  var suyos = db.requerimientos.filter(function(x){
+    return (x.proyecto || "todos") === (r.proyecto || "todos");
+  });
+  var fechas = [];
+  suyos.forEach(function(x){ if(fechas.indexOf(x.fecha) < 0) fechas.push(x.fecha); });
+  fechas.sort();
+  var k = fechas.indexOf(r.fecha) + 1;
+  return "REQ-" + String(k > 0 ? k : 1).padStart(3, "0");
+}
+
+function reqDelDia(proy, f){
+  var cod = codigoDelDia(proy, f);
+  var r = db.requerimientos.filter(function(x){ return x.codigo === cod; })[0];
+  if(r) return r;
+  r = {id:uid(), codigo:cod, proyecto:proy, fecha:f, solicitante:"",
+       area:db.area || "", frente:"", estado:"pendiente", items:[]};
+  db.requerimientos.unshift(r);
+  return r;
+}
+
+/* Un material que la Administradora no validó no se compra, así que
+   tiene que salir de la cuenta del consolidado. Cuando el supervisor lo
+   corrija y lo vuelva a mandar, se suma otra vez. */
+function restarDelConsolidado(codigo, it){
+  var c = buscarConsolidado(it.desc);
+  if(!c || !c.pedidos) return;
+  var k = -1, j;
+  for(j = 0; j < c.pedidos.length; j++){
+    var p = c.pedidos[j];
+    if(p.req === codigo && num(p.cant) === num(it.cant) && (p.quien || "") === (it.sol || "")){ k = j; break; }
+  }
+  if(k < 0) return;
+  c.pedidos.splice(k, 1);
+  c.requerido = Math.round((num(c.requerido) - num(it.cant)) * 100) / 100;
+  if(c.requerido < 0) c.requerido = 0;
 }
 
 function quienSoy(){
@@ -2037,30 +2177,40 @@ function guardarReq(){
   }
   var sol = sols.join(" · "), primero = sols[0];
 
-  var codigo = "REQ-" + String(db.requerimientos.length + 1).padStart(3,"0");
-  /* el frente del requisito es el resumen de los frentes de sus puntos:
-     antes se escribía aparte y se repetía con el de cada renglón */
-  var frentes = [];
-  buenos.forEach(function(i){
-    var f = String(i.frente || "").trim();
-    if(f && frentes.indexOf(f) < 0) frentes.push(f);
-  });
-  db.requerimientos.unshift({
-    id:uid(), codigo:codigo, fecha:$("rq-fecha").value || hoy(),
-    solicitante:sol, area:$("rq-area").value.trim(), frente:frentes.join(" · "),
-    estado:"pendiente",
-    items:buenos.map(function(i){
-      return {desc:i.desc.trim(), und:i.und||"und", cant:num(i.cant),
-              sol:String(i.sol || "").trim() || primero, frente:String(i.frente || "").trim(), obs:i.obs};
-    })
-  });
+  /* Va al pedido del día de su proyecto. Si todavía no existe se abre;
+     si ya lo abrió otro supervisor esta mañana, se le agrega. */
+  var f = $("rq-fecha").value || hoy();
+  var proy = ($("rq-proy") && $("rq-proy").value) || miProyecto();
+  var reg = reqDelDia(proy, f);
+  if(reg.estado !== "pendiente"){
+    return aviso("El pedido de hoy de ese proyecto ya salió a logística. " +
+                 "Lo que registre ahora entra en el de mañana.");
+  }
 
-  /* El consolidado es la suma de lo que pide la obra: cada supervisor
-     hace el suyo, así que un pedido nuevo de algo que ya figura le suma
-     al requerido, no se descuenta de lo que ya estaba previsto. */
-  var reg = db.requerimientos[0];
-  var res = aplicarAlConsolidado(reg);
+  var puestos = buenos.map(function(i){
+    return {desc:i.desc.trim(), und:i.und||"und", cant:num(i.cant),
+            sol:String(i.sol || "").trim() || primero,
+            frente:String(i.frente || "").trim(), obs:i.obs, validado:false};
+  });
+  reg.items = reg.items.concat(puestos);
+  reg.area = $("rq-area").value.trim() || reg.area;
+
+  /* la cabecera resume lo que traen sus puntos */
+  var sls = [], frs = [];
+  reg.items.forEach(function(i){
+    var q = String(i.sol || "").trim(), fr = String(i.frente || "").trim();
+    if(q && sls.indexOf(q) < 0) sls.push(q);
+    if(fr && frs.indexOf(fr) < 0) frs.push(fr);
+  });
+  reg.solicitante = sls.join(" · ");
+  reg.frente = frs.join(" · ");
+
+  /* El consolidado es la suma de lo que pide la obra: se le suman solo
+     los puntos que acaban de entrar, no los que ya estaban contados. */
+  var res = aplicarAlConsolidado({codigo:reg.codigo, fecha:reg.fecha,
+                                  solicitante:reg.solicitante, items:puestos});
   var sumados = res.sumados, nuevos = res.nuevos;
+  var codigo = etiquetaReq(reg);
 
   guardar();
 
@@ -2099,10 +2249,13 @@ function pintarListaReq(){
       '<button class="bt pri der" type="button" id="rq-xls-todo">Descargar Excel</button>' +
     "</div>" +
     '<div class="tabla-caja"><table><thead><tr>' +
-    "<th>Código</th><th>Fecha</th><th>Solicitante</th><th>Frente</th><th class='n'>Materiales</th><th></th>" +
+    "<th>Código</th><th>Proyecto</th><th>Fecha</th><th>Solicitante</th><th>Frente</th><th class='n'>Materiales</th><th></th>" +
     "</tr></thead><tbody>" +
     db.requerimientos.map(function(r){
-      return "<tr><td><b>" + esc(r.codigo) + "</b></td><td>" + fecha(r.fecha) + "</td>" +
+      /* Con varios proyectos hay un REQ-001 por cada uno, así que el
+         código solo no basta para saber cuál es cuál. */
+      return "<tr><td><b>" + esc(etiquetaReq(r)) + "</b></td>" +
+        "<td>" + esc(nombreProyecto(r.proyecto)) + "</td><td>" + fecha(r.fecha) + "</td>" +
         "<td>" + esc(r.solicitante) + "</td><td>" + esc(r.frente || "—") + "</td>" +
         "<td class='n'>" + r.items.length + "</td>" +
         '<td style="width:1%"><button class="bt chico" type="button" data-quitar-req="' + r.id +
@@ -2190,7 +2343,7 @@ function revertirDelConsolidado(codigo){
 function quitarRequerimiento(id){
   var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
   if(!r) return;
-  if(!confirm("¿Quitar el requerimiento " + r.codigo + "?\n\nSe descuenta del consolidado lo que había pedido. No se puede deshacer.")) return;
+  if(!confirm("¿Quitar el requerimiento " + etiquetaReq(r) + "?\n\nSe descuenta del consolidado lo que había pedido. No se puede deshacer.")) return;
 
   var d = revertirDelConsolidado(r.codigo);
   db.requerimientos = db.requerimientos.filter(function(x){ return x.id !== id; });
@@ -2202,7 +2355,7 @@ function quitarRequerimiento(id){
     nubeEncolar("quitar", r);
   }
   pintarListaReq();
-  aviso("Quitado " + r.codigo + ". Se devolvieron " + d.devueltos + " al consolidado" +
+  aviso("Quitado " + etiquetaReq(r) + ". Se devolvieron " + d.devueltos + " al consolidado" +
         (d.borrados ? " y se sacaron " + d.borrados + " renglón(es) que solo existían por él" : "") + ".");
 }
 

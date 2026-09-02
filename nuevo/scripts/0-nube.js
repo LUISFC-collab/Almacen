@@ -261,7 +261,8 @@ function nubeGuardarRequerimiento(r){
   if(!nubeHay()) return Promise.resolve(null);
   var cab = {
     codigo: r.codigo, fecha: r.fecha, solicitante: r.solicitante,
-    area: r.area || null, frente: r.frente || null, estado: r.estado || "pendiente"
+    area: r.area || null, frente: r.frente || null, estado: r.estado || "pendiente",
+    proyecto: r.proyecto || null
   };
   if(Nube.perfil) cab.levantado_por = Nube.perfil.id;
 
@@ -285,7 +286,10 @@ function nubeGuardarRequerimiento(r){
             return {requerimiento_id: id, orden: k + 1, descripcion: i.desc,
                     unidad: i.und || "und", cantidad: num(i.cant),
                     solicitante: i.sol || null, frente: i.frente || null,
-                    observaciones: i.obs || null};
+                    observaciones: i.obs || null,
+                    validado: !!i.validado,
+                    motivo_devolucion: i.motivo || null,
+                    devuelto_en: i.devuelto ? (i.devueltoEn || new Date().toISOString()) : null};
           }))
         });
       });
