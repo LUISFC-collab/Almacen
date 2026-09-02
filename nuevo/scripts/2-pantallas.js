@@ -802,11 +802,74 @@ function nubeBajarYPintar(){
   }).catch(function(){});
 }
 
+/* =====================================================================
+   ACTUALIZAR ESTE EQUIPO
+
+   Lo tiene todo el mundo, no solo el administrador: el que se queda con
+   la versión vieja o con datos raros es cualquiera, y esperar a que el
+   administrador le llegue al cerro no es un plan.
+
+   Borra lo que el navegador guardó de la app y, si la persona entró con
+   su cuenta, también la copia local de los datos: al recargar se vuelve
+   a bajar lo que hay en la base y este equipo queda igual que los demás.
+
+   Si hay cosas sin subir NO se borra nada: primero se avisa. Perder un
+   ingreso registrado sin señal por limpiar el equipo sería el peor
+   cambio posible.
+   ===================================================================== */
+function ponerBotonActualizar(){
+  var caja = $("salir");
+  if(!caja || caja.querySelector(".actualizar")) return;
+  var b = document.createElement("button");
+  b.type = "button";
+  b.className = "actualizar";
+  b.textContent = "Actualizar este equipo";
+  b.title = "Borra lo guardado en este equipo y vuelve a bajar lo de la base";
+  b.addEventListener("click", actualizarEsteEquipo);
+  caja.insertBefore(b, caja.firstChild);
+}
+
+async function actualizarEsteEquipo(){
+  var pend = typeof nubePendientes === "function" ? nubePendientes() : 0;
+  var enLinea = typeof nubeHay === "function" && nubeHay();
+
+  if(pend){
+    if(!confirm("Hay " + pend + " cosa(s) registrada(s) que todavía no suben a la base.\n\n" +
+                "Si limpia ahora se pierden. ¿Continuar igual?")) return;
+  } else if(!confirm("Se borra lo guardado en este equipo y se vuelve a bajar de la base.\n\n" +
+                     (enLinea ? "Sus datos están en la base, no se pierde nada."
+                              : "OJO: este equipo NO está conectado a la base. Lo que tenga aquí se pierde.") +
+                     "\n\n¿Continuar?")) return;
+
+  try{
+    if(window.caches){
+      var llaves = await caches.keys();
+      for(var i = 0; i < llaves.length; i++) await caches.delete(llaves[i]);
+    }
+    if(navigator.serviceWorker){
+      var regs = await navigator.serviceWorker.getRegistrations();
+      for(var j = 0; j < regs.length; j++) await regs[j].unregister();
+    }
+  }catch(e){}
+
+  /* La copia local de los datos solo se tira si hay de dónde volver a
+     bajarlos. Sin sesión se limpia únicamente el caché del navegador. */
+  if(enLinea){
+    try{
+      localStorage.removeItem(CLAVE);
+      localStorage.removeItem("almacen_cola_nube");
+    }catch(e){}
+  }
+  aviso("Limpiando este equipo…");
+  setTimeout(function(){ location.reload(); }, 600);
+}
+
 /* El estado va donde la versión: es lo mismo que se mira cuando algo
    no aparece —qué versión tengo y si estoy hablando con la base—. */
 function pintarEstadoNube(){
   var caja = $("salir");
   if(!caja) return;
+  ponerBotonActualizar();
   var p = caja.querySelector(".nube");
   if(!p){
     p = document.createElement("p");
@@ -910,6 +973,10 @@ function salir(){
 
 /* La versión va pegada arriba del botón de salir: es donde la mira el que
    llama por teléfono para decir «no me aparece lo nuevo». */
+(function ponerActualizar(){
+  if(typeof ponerBotonActualizar === "function") ponerBotonActualizar();
+})();
+
 (function ponerVersion(){
   var caja = $("salir");
   if(!caja || caja.querySelector(".version")) return;

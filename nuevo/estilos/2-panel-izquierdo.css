@@ -123,3 +123,13 @@
   #salir .nube{ margin:0 0 4px; font-size:11px; text-align:center;
     color:var(--tinta3); letter-spacing:.02em; }
   #salir .nube.ok{ color:var(--verde); font-weight:600; }
+
+  /* ---- Actualizar este equipo ----
+     Discreto y en el riel, junto a Salir: es una acción que se hace una
+     vez cada tanto, no algo que compita con el trabajo del día. */
+  #salir .actualizar{ width:100%; margin:0 0 8px; padding:8px 10px; min-height:36px;
+    border-radius:var(--r-s); border:1px solid var(--linea-fuerte);
+    background:transparent; color:var(--tinta2); font-size:11.5px; font-weight:600;
+    cursor:pointer; transition:background .15s, color .15s, border-color .15s; }
+  #salir .actualizar:hover{ background:var(--azul-suave); color:var(--azul);
+    border-color:var(--azul); }
