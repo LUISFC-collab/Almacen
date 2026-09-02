@@ -110,3 +110,9 @@
   #banda button{ appearance:none; border:0; font:inherit; cursor:pointer; margin-left:auto;
     background:var(--sobre-amarillo); color:var(--amarillo); border-radius:99px;
     padding:7px 14px; font-size:12.5px; font-weight:650; min-height:36px; }
+
+  /* ---- La versión, arriba del botón de salir ----
+     Discreta a propósito: se busca cuando hace falta, no compite con el
+     menú. Tabular para que los números no bailen entre una fecha y otra. */
+  #salir .version{ margin:0 0 8px; font-size:11px; color:var(--tinta3);
+    letter-spacing:.02em; font-variant-numeric:tabular-nums; text-align:center; }

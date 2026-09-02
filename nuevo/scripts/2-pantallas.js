@@ -602,6 +602,18 @@ function salir(){
   window.scrollTo(0,0);
 }
 
+/* La versión va pegada arriba del botón de salir: es donde la mira el que
+   llama por teléfono para decir «no me aparece lo nuevo». */
+(function ponerVersion(){
+  var caja = $("salir");
+  if(!caja || caja.querySelector(".version")) return;
+  var p = document.createElement("p");
+  p.className = "version";
+  p.textContent = textoVersion();
+  p.title = "Versión publicada de la aplicación";
+  caja.insertBefore(p, caja.firstChild);
+})();
+
 pintarPortada();
 pintarAlta();
 $("salir").querySelector("button").addEventListener("click", salir);

@@ -1005,6 +1005,25 @@ var VISTA = {};
 
 
 /* =====================================================================
+   QUÉ VERSIÓN ES ESTA
+
+   La fecha en que se cerró la versión y una letra: la a es la primera
+   del día, la b la segunda, y así. Sin la letra dos publicaciones del
+   mismo día se verían iguales, que es justo cuando uno necesita saber
+   si el celular ya bajó la nueva o sigue con la de hace dos horas.
+
+   Se cambia AQUÍ, a mano, cada vez que se publica. Es la única línea
+   que hay que tocar.
+   ===================================================================== */
+var VERSION_APP = "2026-09-02-a";
+
+function textoVersion(){
+  var p = String(VERSION_APP).split("-");
+  if(p.length < 4) return VERSION_APP;
+  return "Versión " + p[2] + "/" + p[1] + "/" + p[0].slice(2) + " · " + p[3];
+}
+
+/* =====================================================================
    BOTÓN QUE TAMBIÉN RECIBE ARCHIVOS
 
    El botón de siempre —«Subir desde Excel», «Restaurar»— sigue estando
