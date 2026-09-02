@@ -254,9 +254,22 @@ function siguienteEstado(r){
    cambiar el pedido dejaría el kardex diciendo una cosa y el pedido otra.
    El administrador de la app puede editar siempre, para arreglar líos. */
 function puedeEditarReq(r){
-  if(cargo === "admin") return true;
-  if(cargo !== "obra") return false;
-  return r.estado === "pendiente" || r.estado === "en_logistica";
+  /* Mientras el pedido está en manos de Obra se corrige libremente. En
+     cuanto sale, no: logística ya está comprando contra esos números y
+     cambiarlos por detrás dejaría a alguien comprando otra cosa.
+
+     Tampoco lo abre el administrador. Si pudiera, la regla no existiría:
+     el camino de vuelta es que logística lo devuelva con su comentario,
+     y ese camino queda anotado. */
+  if(r.estado !== "pendiente") return false;
+  return cargo === "obra" || cargo === "admin";
+}
+
+/* Logística no corrige: devuelve. Escribe qué falta y el material
+   regresa a la Administradora, que es quien tiene cómo averiguarlo. */
+function puedeDevolverALaObra(r){
+  return (cargo === "jefatura" || cargo === "compras" || cargo === "admin") &&
+         (r.estado === "en_logistica" || r.estado === "aprobado");
 }
 
 var editando = null;      /* id del requerimiento abierto en el editor */
@@ -405,6 +418,8 @@ VISTA.revisar = function(){
 
   var html = '<div class="vista">' + resumen;
 
+  if(esObra) html += tarjetaDeLogistica();
+
   if(esObra){
     html += abiertos.length
       ? abiertos.map(function(r){ return tarjetaDelDia(r); }).join("")
@@ -440,13 +455,30 @@ VISTA.revisar = function(){
                 ? '<button class="bt chico pri" type="button" data-ok="' + r.id + '">Visto bueno</button>'
                 : "") + "</td></tr>" +
             '<tr data-det="' + r.id + '" style="display:none"><td colspan="7" style="background:var(--sup2)">' +
-              vivos.map(function(it){
-                return "· <b>" + esc(it.desc) + "</b> — " + it.cant + " " + esc(it.und) +
-                  (it.sol ? " · " + esc(it.sol) : "") +
-                  (it.fechaObra ? " · obra " + fecha(it.fechaObra) : "") +
-                  (it.frente ? " · " + esc(it.frente) : "") +
-                  (it.obs ? " · <i>" + esc(it.obs) + "</i>" : "");
-              }).join("<br>") + "</td></tr>" +
+              (puedeDevolverALaObra(r)
+                ? '<div class="tabla-caja"><table><thead><tr><th>Material</th>' +
+                  "<th class='n'>Cantidad</th><th>Solicitante</th><th>Necesario en obra</th>" +
+                  "<th>Qué falta</th><th></th></tr></thead><tbody>" +
+                  vivos.map(function(it){
+                    var k = r.items.indexOf(it);
+                    return "<tr><td><b>" + esc(it.desc) + "</b></td>" +
+                      "<td class='n'>" + it.cant + " " + esc(it.und) + "</td>" +
+                      "<td>" + esc(it.sol || "—") + "</td>" +
+                      "<td>" + urgencia(it.fechaObra) + "</td>" +
+                      '<td style="min-width:190px"><input data-falta="' + r.id + ":" + k +
+                        '" placeholder="Qué especificación falta"></td>' +
+                      '<td><button class="bt chico" type="button" data-devolver="' + r.id + ":" + k +
+                        '">Devolver a Obra</button></td></tr>';
+                  }).join("") + "</tbody></table></div>" +
+                  '<p class="nota" style="margin:8px 0 0">Aquí no se corrige nada: escriba qué falta ' +
+                  "y el material vuelve a la Administradora para que lo complete.</p>"
+                : vivos.map(function(it){
+                    return "· <b>" + esc(it.desc) + "</b> — " + it.cant + " " + esc(it.und) +
+                      (it.sol ? " · " + esc(it.sol) : "") +
+                      (it.fechaObra ? " · obra " + fecha(it.fechaObra) : "") +
+                      (it.frente ? " · " + esc(it.frente) : "") +
+                      (it.obs ? " · <i>" + esc(it.obs) + "</i>" : "");
+                  }).join("<br>")) + "</td></tr>" +
             (editando === r.id ? filaEditor(r) : "");
         }).join("") + "</tbody></table></div>"
       : '<div class="vacio">Todavía no ha salido ningún pedido.</div>') +
@@ -455,6 +487,55 @@ VISTA.revisar = function(){
   $("zona").innerHTML = html;
   engancharRevisar();
 };
+
+/* ---------------------------------------------------------------------
+   LO QUE LOGÍSTICA DEVOLVIÓ
+
+   No lo devuelven al supervisor: se lo devuelven a la Administradora,
+   que es quien tiene cómo averiguar la especificación que falta. Ella
+   la completa y el material vuelve a entrar en el pedido de hoy.
+   --------------------------------------------------------------------- */
+function devueltosDeLogistica(){
+  var lista = [];
+  db.requerimientos.forEach(function(r){
+    (r.items || []).forEach(function(it, k){
+      if(it.aCorregir) lista.push({r:r, k:k, it:it});
+    });
+  });
+  return lista;
+}
+
+/* Aquí sí se escribe, y es el único sitio donde se puede tocar algo de
+   un pedido que ya salió. Se edita el material, no el pedido: lo demás
+   sigue cerrado, que es de lo que se trataba. */
+function tarjetaDeLogistica(){
+  var lista = devueltosDeLogistica();
+  if(!lista.length) return "";
+  return '<div class="tarjeta">' +
+    "<h2>Logística los devolvió</h2>" +
+    '<p class="nota">Les falta una especificación para poder comprarlos. Complete lo ' +
+    "que piden aquí mismo y vuelva a mandarlos; el resto del pedido sigue cerrado.</p>" +
+    '<div class="tabla-caja"><table><thead><tr>' +
+    "<th>Material</th><th class='n'>Cantidad</th><th>Necesario en obra</th>" +
+    "<th>Especificación</th><th>Venía en</th><th>Qué piden</th><th></th>" +
+    "</tr></thead><tbody>" +
+    lista.map(function(x){
+      var id = esc(x.r.id) + ":" + x.k;
+      return "<tr>" +
+        '<td style="min-width:170px"><input data-corr="' + id + '" data-cc="desc" value="' +
+          esc(x.it.desc) + '"></td>' +
+        '<td style="width:96px"><input class="n" type="number" min="0" step="0.01" data-corr="' + id +
+          '" data-cc="cant" value="' + esc(x.it.cant) + '"></td>' +
+        '<td style="width:150px"><input type="date" data-corr="' + id + '" data-cc="fechaObra" value="' +
+          esc(x.it.fechaObra || "") + '"></td>' +
+        '<td style="min-width:190px"><input data-corr="' + id + '" data-cc="obs" value="' +
+          esc(x.it.obs || "") + '" placeholder="Marca, medida, color…"></td>' +
+        "<td>" + esc(etiquetaReq(x.r)) + "</td>" +
+        '<td style="color:var(--rojo);min-width:150px">' + esc(x.it.motivo || "no dijeron qué falta") + "</td>" +
+        '<td><button class="bt chico pri" type="button" data-rehacer="' + id +
+          '">Listo, mandar</button></td></tr>';
+    }).join("") + "</tbody></table></div></div>";
+}
 
 /* Cuándo se necesita en obra, y cuánto falta. Lo que ya venció o vence
    esta semana va en rojo: es lo que decide qué se compra primero, y en
@@ -509,6 +590,9 @@ function tarjetaDelDia(r){
             "<td>" + urgencia(it.fechaObra) + "</td>" +
             "<td>" + esc(it.frente || "—") + "</td>" +
             '<td style="min-width:150px">' +
+              (it.vieneDeLogistica
+                ? '<b style="color:var(--rojo)">Logística pide: ' + esc(it.vieneDeLogistica) + "</b><br>"
+                : "") +
               (it.validado
                 ? esc(it.obs || "—")
                 : '<input data-motivo="' + r.id + ':' + k + '" value="' + esc(it.motivo || "") +
@@ -574,11 +658,103 @@ function engancharRevisar(){
     aviso(etiquetaReq(r) + " · " + FLUJO[r.estado].t.toLowerCase() + ".");
   });
 
+  var dv = z.querySelectorAll("[data-devolver]");
+  for(i=0;i<dv.length;i++) dv[i].addEventListener("click", function(){
+    var p = this.dataset.devolver.split(":");
+    var campo = z.querySelector('[data-falta="' + this.dataset.devolver + '"]');
+    devolverALaObra(p[0], +p[1], campo ? campo.value : "");
+  });
+
+  var cc = z.querySelectorAll("[data-corr]");
+  for(i=0;i<cc.length;i++) cc[i].addEventListener("input", function(){
+    var p = this.dataset.corr.split(":");
+    var r = db.requerimientos.filter(function(x){ return x.id === p[0]; })[0];
+    if(!r) return;
+    var it = r.items[+p[1]];
+    if(this.dataset.cc === "cant" && it.cantAntes == null) it.cantAntes = it.cant;
+    it[this.dataset.cc] = this.value;
+    guardar();
+  });
+
+  var rh = z.querySelectorAll("[data-rehacer]");
+  for(i=0;i<rh.length;i++) rh[i].addEventListener("click", function(){
+    var p = this.dataset.rehacer.split(":");
+    completarYReenviar(p[0], +p[1]);
+  });
+
   var es = z.querySelectorAll("[data-editar]");
   for(i=0;i<es.length;i++) es[i].addEventListener("click", function(){
     abrirEditor(this.dataset.editar);
   });
   engancharEditor();
+}
+
+/* ---------------------------------------------------------------------
+   DEVOLVER A LA OBRA
+
+   Logística no toca el pedido: escribe qué falta y el material vuelve.
+   Se exige el comentario a propósito. Un material devuelto sin decir
+   por qué obliga a la Administradora a adivinar, y acaba yendo y
+   viniendo dos veces.
+   --------------------------------------------------------------------- */
+function devolverALaObra(id, k, comentario){
+  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  var it = r.items[k];
+  if(!it) return;
+
+  var texto = String(comentario || "").trim();
+  if(!texto) return aviso("Escriba qué especificación falta. Sin eso, en obra no saben qué completar.");
+
+  /* No se da de baja: el material sigue haciendo falta, lo que falta es
+     decir cuál es. Por eso no se toca el consolidado: la obra lo sigue
+     necesitando mientras tanto. */
+  it.aCorregir = true;
+  it.devueltoPor = "logistica";
+  it.devueltoEn = new Date().toISOString();
+  it.motivo = texto;
+  it.validado = false;
+
+  guardar();
+  subirReq(r);
+  VISTA.revisar();
+  pintarMenu();
+  aviso("«" + it.desc + "» volvió a la Administradora de Obra.");
+}
+
+/* El material se queda en el pedido del que salió: mover un material a
+   otro REQ rompería la regla de un pedido por día y dejaría a logística
+   buscándolo en dos sitios. Se completa donde está y se vuelve a mandar.
+
+   Si cambió la cantidad hay que rehacer la cuenta del consolidado, que
+   se llevaba la vieja. */
+function completarYReenviar(id, k){
+  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  var it = r.items[k];
+  if(!it) return;
+
+  if(!String(it.obs || "").trim()){
+    return aviso("Escriba la especificación que pide logística; sin eso volvería igual.");
+  }
+
+  var antes = num(it.cantAntes != null ? it.cantAntes : it.cant);
+  if(num(it.cant) !== antes){
+    restarDelConsolidado(r.codigo, {desc:it.desc, cant:antes, sol:it.sol});
+    aplicarAlConsolidado({codigo:r.codigo, fecha:r.fecha,
+                          solicitante:r.solicitante, items:[it]});
+  }
+
+  it.aCorregir = false;
+  it.validado = true;
+  it.corregidoEn = new Date().toISOString();
+  delete it.cantAntes;
+
+  guardar();
+  subirReq(r);
+  VISTA.revisar();
+  pintarMenu();
+  aviso("«" + it.desc + "» volvió a logística con la especificación.");
 }
 
 /* ---------------------------------------------------------------------
@@ -954,9 +1130,13 @@ function nubeArrancar(){
   Nube.alCambiar = function(tabla){
     /* Llega el aviso de que algo cambió allá. Se vuelve a bajar en vez de
        aplicar el cambio suelto: son pocos cientos de filas y así no hay
-       forma de que la copia de aquí se desvíe de la de la base. */
+       forma de que la copia de aquí se desvíe de la de la base.
+
+       El aviso llega también por lo que uno mismo acaba de escribir, y
+       en ese momento la escritura puede ir por la mitad. Por eso se
+       espera un poco más y, si todavía hay algo subiendo, se aplaza. */
     clearTimeout(Nube._t);
-    Nube._t = setTimeout(nubeBajarYPintar, 400);
+    Nube._t = setTimeout(nubeBajarYPintar, 900);
   };
   nubeEscuchar();
   nubeSubirPendientes().then(function(x){
@@ -967,6 +1147,14 @@ function nubeArrancar(){
 }
 
 function nubeBajarYPintar(){
+  /* Bajar encima de una escritura a medio terminar es lo que hacía que
+     un cambio pareciera deshacerse solo. Se espera a que no quede nada
+     en el aire. */
+  if(typeof nubeSubiendo === "function" && nubeSubiendo()){
+    clearTimeout(Nube._t);
+    Nube._t = setTimeout(nubeBajarYPintar, 700);
+    return Promise.resolve(null);
+  }
   return nubeTraerTodo().then(function(t){
     if(!t) return;
     /* Los requerimientos de la base mandan sobre los de este equipo:
@@ -990,7 +1178,9 @@ function nubeBajarYPintar(){
                           validado: !!i.validado,
                           motivo: i.motivo_devolucion || "",
                           devuelto: !!i.devuelto_en,
-                          devueltoEn: i.devuelto_en || null};
+                          devueltoEn: i.devuelto_en || null,
+                          devueltoPor: i.devuelto_por || "obra",
+                          aCorregir: !!i.a_corregir};
                 })};
       });
     }

@@ -1997,6 +1997,9 @@ function misDevueltos(){
   db.requerimientos.forEach(function(r){
     (r.items || []).forEach(function(it, k){
       if(!it.devuelto || it.corregido) return;
+      /* lo que devolvió logística no es asunto del supervisor: va a la
+         Administradora, que es quien tiene cómo completar lo que falta */
+      if(it.devueltoPor === "logistica") return;
       if(!todo && String(it.sol || "") !== yo) return;
       lista.push({r:r, k:k, it:it});
     });

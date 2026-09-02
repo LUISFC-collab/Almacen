@@ -318,7 +318,31 @@ function nubeTraerTodo(){
    Un requerimiento son dos tablas: la cabecera y sus puntos. Se manda
    la cabecera, la base devuelve su id, y con ese id van los puntos.
    --------------------------------------------------------------------- */
+/* Cuántas escrituras hay en el aire ahora mismo.
+
+   Guardar un requerimiento son tres viajes: la cabecera, el borrado de
+   los puntos y los puntos nuevos. Entre el primero y el último la base
+   está a medio escribir, y el aviso de tiempo real del primer viaje ya
+   salió. Si en ese hueco alguien vuelve a bajarlo todo, se lleva la foto
+   incompleta y la pinta encima de lo que la persona acaba de hacer: el
+   cambio parece deshacerse solo.
+
+   Por eso se cuenta. Mientras haya algo subiendo, no se baja. */
+var nubeEnVuelo = 0;
+
+function nubeSubiendo(){ return nubeEnVuelo > 0; }
+
 function nubeGuardarRequerimiento(r){
+  if(!nubeHay()) return Promise.resolve(null);
+  nubeEnVuelo++;
+  return nubeGuardarRequerimientoAhora(r).then(function(x){
+    nubeEnVuelo--; return x;
+  }).catch(function(e){
+    nubeEnVuelo--; throw e;
+  });
+}
+
+function nubeGuardarRequerimientoAhora(r){
   if(!nubeHay()) return Promise.resolve(null);
   var cab = {
     codigo: r.codigo, fecha: r.fecha, solicitante: r.solicitante,
@@ -351,7 +375,9 @@ function nubeGuardarRequerimiento(r){
                     fecha_requerida: i.fechaObra || null,
                     validado: !!i.validado,
                     motivo_devolucion: i.motivo || null,
-                    devuelto_en: i.devuelto ? (i.devueltoEn || new Date().toISOString()) : null};
+                    devuelto_en: i.devuelto ? (i.devueltoEn || new Date().toISOString()) : null,
+                    devuelto_por: (i.devuelto || i.aCorregir) ? (i.devueltoPor || "obra") : null,
+                    a_corregir: !!i.aCorregir};
           }))
         });
       });
