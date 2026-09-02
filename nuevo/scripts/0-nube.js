@@ -47,6 +47,32 @@ function nubeCorreo(fc){
   return String(fc).replace(/\D/g, "") + "@columbito.local";
 }
 
+/* =====================================================================
+   LA CONTRASEÑA CORTA
+
+   Supabase no acepta contraseñas de menos de 6 caracteres: el panel
+   directamente se niega a bajar el mínimo. Pero en obra la gente usa
+   claves de cuatro o cinco dígitos, como en el otro aplicativo, y no
+   vamos a obligar a nadie a cambiar su costumbre por una regla de la
+   plataforma.
+
+   Se le agrega una cola fija antes de mandarla. La persona escribe
+   "12345" y el servidor recibe "12345·almacen-cpq", que ya pasa el
+   mínimo. La cola es siempre la misma, así que al entrar coincide.
+
+   Que quede claro qué mejora y qué no: la cola satisface la regla de
+   longitud, no hace la clave más difícil de adivinar. Una de cinco
+   dígitos sigue siendo de cinco dígitos. Lo que sí gana frente al otro
+   aplicativo es que aquí la contraseña viaja cifrada y se guarda
+   cifrada: ni la base ni nadie con acceso a ella puede leerla, mientras
+   que allá está en texto plano dentro de la fila del usuario.
+   ===================================================================== */
+var NUBE_COLA_CLAVE = "·almacen-cpq";
+
+function nubeClave(clave){
+  return String(clave == null ? "" : clave) + NUBE_COLA_CLAVE;
+}
+
 function nubeCabeceras(){
   var h = {"apikey": NUBE_CLAVE, "Content-Type": "application/json"};
   h.Authorization = "Bearer " + ((Nube.sesion && Nube.sesion.access_token) || NUBE_CLAVE);
@@ -80,7 +106,7 @@ function nubePedir(ruta, opciones){
 function nubeEntrar(fotocheck, clave){
   return nubePedir("/auth/v1/token?grant_type=password", {
     method: "POST",
-    body: JSON.stringify({email: nubeCorreo(fotocheck), password: clave})
+    body: JSON.stringify({email: nubeCorreo(fotocheck), password: nubeClave(clave)})
   }).then(function(s){
     Nube.sesion = s;
     return nubeMiPerfil();
@@ -103,7 +129,7 @@ function nubeCrearPerfil(datos){
     method: "POST",
     body: JSON.stringify({
       email: nubeCorreo(datos.fotocheck),
-      password: datos.clave,
+      password: nubeClave(datos.clave),
       data: {nombre: datos.nombre, puesto: datos.puesto, celular: datos.celular,
              fotocheck: String(datos.fotocheck).replace(/\D/g, "")}
     })
