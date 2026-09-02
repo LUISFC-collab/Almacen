@@ -1449,17 +1449,17 @@ function excelRequisito(r){
     ["ÁREA :", r.area || db.area, "", "", "", "FECHA DE ENTREGA:", ""],
     ["SUPERVISOR :", r.solicitante],
     [],
-    ["N°","DESCRIPCIÓN","UND","CANTIDAD","ENTREGA","ENTREGA","LUGAR/FRENTE","AUTORIZADO","OBSERVACIONES"],
-    ["","","","SOLICITADA","PARCIAL","TOTAL","",""]
+    ["N°","DESCRIPCIÓN","UND","CANTIDAD","ENTREGA","ENTREGA","SOLICITANTE","LUGAR/FRENTE","AUTORIZADO","OBSERVACIONES"],
+    ["","","","SOLICITADA","PARCIAL","TOTAL","","","",""]
   ];
   r.items.forEach(function(i, n){
     filas.push([n + 1, i.desc, i.und || "und", num(i.cant), "", "",
-                i.frente || r.frente || "", "", i.obs || ""]);
+                i.sol || r.solicitante || "", i.frente || "", "", i.obs || ""]);
   });
   /* filas en blanco hasta 15, como en la plantilla impresa */
-  for(var n = r.items.length; n < 15; n++) filas.push([n + 1, "", "", "", "", "", "", "", ""]);
+  for(var n = r.items.length; n < 15; n++) filas.push([n + 1, "", "", "", "", "", "", "", "", ""]);
 
-  return crearXLSX(filas, [1, 7, 8], [6, 46, 8, 12, 12, 12, 18, 14, 30]);
+  return crearXLSX(filas, [1, 7, 8], [6, 46, 8, 12, 12, 12, 18, 18, 14, 30]);
 }
 
 /* ---------- leer el Excel del requerimiento ----------
@@ -1560,6 +1560,7 @@ function importarFilas(filas){
       else if(/^und|^unidad/.test(t) && prueba.und === undefined) prueba.und = c;
       else if(/^cantidad|^cant|^solicitada/.test(t) && prueba.cant === undefined) prueba.cant = c;
       else if(/lugar|frente/.test(t) && prueba.frente === undefined) prueba.frente = c;
+      else if(/solicit|quien|pide/.test(t) && prueba.sol === undefined) prueba.sol = c;
       else if(/observacion/.test(t) && prueba.obs === undefined) prueba.obs = c;
     }
     if(prueba.desc !== undefined){ iCab = i; col = prueba; break; }
@@ -1577,6 +1578,7 @@ function importarFilas(filas){
       desc: desc,
       und: normalizarUnidad(col.und === undefined ? "" : fila[col.und]),
       cant: cant > 0 ? cant : "",
+      sol: col.sol === undefined ? "" : String(fila[col.sol] || "").trim(),
       frente: col.frente === undefined ? "" : String(fila[col.frente] || "").trim(),
       obs: col.obs === undefined ? "" : String(fila[col.obs] || "").trim()
     });
@@ -1622,9 +1624,7 @@ VISTA.requisito = function(){
     "<h2>Nuevo requisito</h2>" +
     '<p class="nota">Lo que pide el frente. Se llena igual que la plantilla de la obra.</p>' +
     '<div class="rejilla dos">' +
-      '<label class="campo"><span>Solicitante</span><input id="rq-sol" placeholder="Ing. Ramos"></label>' +
       '<label class="campo"><span>Área</span><input id="rq-area" value="' + esc(db.area) + '"></label>' +
-      '<label class="campo"><span>Lugar / frente</span><input id="rq-frente" placeholder="Poza 3"></label>' +
       '<label class="campo"><span>Fecha del pedido</span><input type="date" id="rq-fecha" value="' + hoy() + '" max="' + hoy() + '"></label>' +
     "</div>" +
     '<div class="botones"><button class="bt sec" type="button" id="rq-add">Agregar material</button>' +
@@ -1637,7 +1637,7 @@ VISTA.requisito = function(){
     '<div class="tarjeta"><h2>Requisitos registrados</h2><div id="rq-lista"></div></div></div>';
 
   $("rq-add").addEventListener("click", function(){
-    itemsReq.push({desc:"", und:"und", cant:"", frente:$("rq-frente").value, obs:""});
+    itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
     pintarItems();
     var ults = $("rq-items").querySelectorAll('[data-c="desc"]');
     if(ults.length) ults[ults.length-1].focus();
@@ -1646,7 +1646,7 @@ VISTA.requisito = function(){
     confirmar:"toque para cargar los renglones",
     alConfirmar:function(a){ cargarExcel(a); }});
   $("rq-guardar").addEventListener("click", guardarReq);
-  if(!itemsReq.length) itemsReq.push({desc:"", und:"und", cant:"", frente:"", obs:""});
+  if(!itemsReq.length) itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
   pintarItems();
   pintarListaReq();
 };
@@ -1654,7 +1654,7 @@ VISTA.requisito = function(){
 function pintarItems(){
   var html = '<div class="tabla-caja"><table><thead><tr>' +
     "<th>N°</th><th>Descripción</th><th>Und</th><th class='n'>Cantidad</th>" +
-    "<th>Lugar / frente</th><th>Observaciones</th><th></th></tr></thead><tbody>";
+    "<th>Solicitante</th><th>Lugar / frente</th><th>Observaciones</th><th></th></tr></thead><tbody>";
   for(var i=0;i<itemsReq.length;i++){
     var it = itemsReq[i];
     html += "<tr><td class='n' style='color:var(--tinta3)'>" + (i+1) + "</td>" +
@@ -1662,7 +1662,9 @@ function pintarItems(){
       '<td style="width:140px"><select data-i="' + i + '" data-c="und">' +
         opcionesUnidad(it.und || "und") + "</select></td>" +
       '<td style="width:96px"><input class="n" type="number" min="0" step="0.01" data-i="' + i + '" data-c="cant" value="' + esc(it.cant) + '"></td>' +
-      '<td style="min-width:130px"><input data-i="' + i + '" data-c="frente" value="' + esc(it.frente) + '"></td>' +
+      '<td style="min-width:130px"><input data-i="' + i + '" data-c="sol" value="' + esc(it.sol || "") +
+        '" placeholder="Quién lo pide"></td>' +
+      '<td style="min-width:130px"><input data-i="' + i + '" data-c="frente" value="' + esc(it.frente) + '" placeholder="Poza 3"></td>' +
       '<td style="min-width:150px"><input data-i="' + i + '" data-c="obs" value="' + esc(it.obs) + '"></td>' +
       '<td><button class="bt chico" type="button" data-quitar="' + i + '">Quitar</button></td></tr>';
   }
@@ -1700,16 +1702,32 @@ function contarReq(){
 function guardarReq(){
   var buenos = itemsReq.filter(function(i){ return String(i.desc).trim() && num(i.cant) > 0; });
   if(!buenos.length) return aviso("Agregue al menos un material con su cantidad.");
-  var sol = $("rq-sol").value.trim();
-  if(!sol) return aviso("Escriba quién lo pide.");
+  /* El solicitante ya no se escribe arriba: va en cada punto. El del
+     requisito es el resumen de los que aparecen; un punto sin nombre toma
+     el del primero que sí lo tenga, para no obligar a repetirlo. */
+  var sols = [];
+  buenos.forEach(function(i){
+    var s = String(i.sol || "").trim();
+    if(s && sols.indexOf(s) < 0) sols.push(s);
+  });
+  if(!sols.length) return aviso("Escriba quién lo pide, al menos en un punto.");
+  var sol = sols.join(" · "), primero = sols[0];
 
   var codigo = "REQ-" + String(db.requerimientos.length + 1).padStart(3,"0");
+  /* el frente del requisito es el resumen de los frentes de sus puntos:
+     antes se escribía aparte y se repetía con el de cada renglón */
+  var frentes = [];
+  buenos.forEach(function(i){
+    var f = String(i.frente || "").trim();
+    if(f && frentes.indexOf(f) < 0) frentes.push(f);
+  });
   db.requerimientos.unshift({
     id:uid(), codigo:codigo, fecha:$("rq-fecha").value || hoy(),
-    solicitante:sol, area:$("rq-area").value.trim(), frente:$("rq-frente").value.trim(),
+    solicitante:sol, area:$("rq-area").value.trim(), frente:frentes.join(" · "),
     estado:"pendiente",
     items:buenos.map(function(i){
-      return {desc:i.desc.trim(), und:i.und||"und", cant:num(i.cant), frente:i.frente, obs:i.obs};
+      return {desc:i.desc.trim(), und:i.und||"und", cant:num(i.cant),
+              sol:String(i.sol || "").trim() || primero, frente:String(i.frente || "").trim(), obs:i.obs};
     })
   });
 
@@ -1722,7 +1740,8 @@ function guardarReq(){
     if(c){
       c.requerido = Math.round((num(c.requerido) + num(i.cant)) * 100) / 100;
       c.pedidos = c.pedidos || [];
-      c.pedidos.push({req:codigo, quien:sol, cant:num(i.cant), fecha:$("rq-fecha").value || hoy()});
+      c.pedidos.push({req:codigo, quien:String(i.sol || "").trim() || primero, cant:num(i.cant),
+                      fecha:$("rq-fecha").value || hoy()});
       sumados++;
       return;
     }
@@ -1730,7 +1749,8 @@ function guardarReq(){
       codigo:"R01-" + String(db.consolidado.length + 1).padStart(3,"0"),
       desc:i.desc.trim(), unidad:i.und||"und", requerido:num(i.cant),
       comprado:0, entregado:0, adicional:true,
-      pedidos:[{req:codigo, quien:sol, cant:num(i.cant), fecha:$("rq-fecha").value || hoy()}]});
+      pedidos:[{req:codigo, quien:String(i.sol || "").trim() || primero, cant:num(i.cant),
+                fecha:$("rq-fecha").value || hoy()}]});
     nuevos++;
   });
 
@@ -1739,7 +1759,7 @@ function guardarReq(){
   try{
     bajarBlob("REQUISITO_" + codigo + ".xlsx", excelRequisito(reg));
   }catch(e){ /* si el navegador no deja bajar, el pedido igual quedó guardado */ }
-  itemsReq = [{desc:"", und:"und", cant:"", frente:"", obs:""}];
+  itemsReq = [{desc:"", und:"und", cant:"", sol:"", frente:"", obs:""}];
   VISTA.requisito();
   var detalle = [];
   if(sumados) detalle.push(sumados + " sumado(s) al consolidado");
