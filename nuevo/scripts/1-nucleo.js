@@ -1704,6 +1704,115 @@ function cargarExcel(archivo){
   lector.readAsArrayBuffer(archivo);
 }
 
+/* =====================================================================
+   EL REQUERIMIENTO A MEDIO ARMAR
+
+   El supervisor empieza el pedido en el frente con el celular y lo
+   termina en la oficina con la laptop. Hasta ahora lo escrito vivía en
+   el navegador de ese equipo: cambiaba de aparato y arrancaba de cero.
+
+   Se guarda en dos sitios a la vez y por razones distintas. En este
+   equipo, para que no se pierda si se cierra la pestaña o se va la
+   señal. En la base, para que aparezca en el otro aparato.
+
+   A la base no se sube en cada tecla: se espera a que deje de escribir.
+   Subir letra por letra sería un viaje por pulsación y en la mina la
+   señal no da para eso.
+   ===================================================================== */
+var BORRADOR_LOCAL = "almacen_borrador_req";
+var borradorEspera = null;
+var borradorVersion = 0;
+
+function borradorAhora(){
+  return {
+    fecha: ($("rq-fecha") && $("rq-fecha").value) || hoy(),
+    area:  ($("rq-area") && $("rq-area").value) || "",
+    items: itemsReq.slice(),
+    tocado: new Date().toISOString()
+  };
+}
+
+function borradorVacio(b){
+  if(!b || !b.items || !b.items.length) return true;
+  return !b.items.some(function(i){
+    return String(i.desc || "").trim() || String(i.cant || "").trim() ||
+           String(i.frente || "").trim() || String(i.obs || "").trim();
+  });
+}
+
+function anotarBorrador(){
+  var b = borradorAhora();
+  try{
+    if(borradorVacio(b)) localStorage.removeItem(BORRADOR_LOCAL);
+    else localStorage.setItem(BORRADOR_LOCAL, JSON.stringify(b));
+  }catch(e){}
+
+  if(typeof nubeHay !== "function" || !nubeHay()) return;
+  clearTimeout(borradorEspera);
+  borradorEspera = setTimeout(function(){
+    if(borradorVacio(b)){ nubeSoltarBorrador(); return; }
+    nubeGuardarBorrador(b).then(function(){ pintarAvisoBorrador("guardado"); })
+                          .catch(function(){ pintarAvisoBorrador("pendiente"); });
+  }, 1200);
+}
+
+function soltarBorrador(){
+  clearTimeout(borradorEspera);
+  try{ localStorage.removeItem(BORRADOR_LOCAL); }catch(e){}
+  if(typeof nubeSoltarBorrador === "function") nubeSoltarBorrador();
+}
+
+function borradorGuardado(){
+  var b = null;
+  try{ b = JSON.parse(localStorage.getItem(BORRADOR_LOCAL) || "null"); }catch(e){}
+  return borradorVacio(b) ? null : b;
+}
+
+/* Se aplica el que sea más nuevo, venga de donde venga. Comparar por
+   fecha y no por «la base manda» evita el caso feo: escribe en el
+   celular sin señal, abre la laptop, y la laptop le pisa lo del celular
+   con algo más viejo. */
+function aplicarBorrador(b, deDonde){
+  if(borradorVacio(b)) return false;
+
+  /* Si es lo mismo que ya está en pantalla no se toca nada. El aviso de
+     tiempo real llega también por lo que uno mismo acaba de guardar, y
+     repintar por eso sacaría el cursor de donde está escribiendo. */
+  if(JSON.stringify(b.items) === JSON.stringify(itemsReq)) return false;
+
+  /* Y si en este momento tiene el cursor dentro de la tabla, se deja
+     para después: nadie quiere que le cambien el renglón a media
+     palabra porque abrió la app en otro aparato. */
+  var foco = document.activeElement;
+  if(foco && $("rq-items") && $("rq-items").contains(foco)) return false;
+
+  var mio = borradorGuardado();
+  if(mio && mio.tocado && b.tocado && mio.tocado > b.tocado) return false;
+  itemsReq = b.items.slice();
+  try{ localStorage.setItem(BORRADOR_LOCAL, JSON.stringify(b)); }catch(e){}
+  if(actual !== "requisito") return true;
+  if($("rq-fecha") && b.fecha) $("rq-fecha").value = b.fecha;
+  if($("rq-area")  && b.area)  $("rq-area").value  = b.area;
+  pintarItems();
+  if(deDonde) aviso("Se recuperó lo que estaba escribiendo" +
+                    (deDonde === "celular" || deDonde === "laptop" ? " en el/la " + deDonde : "") + ".");
+  return true;
+}
+
+function pintarAvisoBorrador(estado){
+  var e = $("rq-borrador");
+  if(!e) return;
+  if(estado === "guardado"){
+    e.textContent = "Guardado en la base · lo puede seguir en otro equipo";
+    e.style.color = "var(--verde, #167c3c)";
+  } else if(estado === "pendiente"){
+    e.textContent = "No se pudo guardar en la base · queda en este equipo";
+    e.style.color = "var(--ambar, #8a5a00)";
+  } else {
+    e.textContent = "";
+  }
+}
+
 /* ---------- REQUISITO ---------- */
 var itemsReq = [];
 VISTA.requisito = function(){
@@ -1723,13 +1832,15 @@ VISTA.requisito = function(){
     '<div class="botones">' +
     botonArchivo("rq-archivo", "Subir desde Excel", ".xlsx,.csv") + "</div>" +
     '<div id="rq-items" style="margin-top:12px"></div>' +
-    '<div class="botones"><button class="bt pri" type="button" id="rq-guardar">Registrar requerimiento</button></div>' +
+    '<div class="botones"><button class="bt pri" type="button" id="rq-guardar">Registrar requerimiento</button>' +
+    '<small id="rq-borrador" class="der" style="font-size:11.5px"></small></div>' +
     "</div>" +
     '<div class="tarjeta"><h2>Requerimientos registrados</h2><div id="rq-lista"></div></div></div>';
 
   $("rq-add").addEventListener("click", function(){
     itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
     pintarItems();
+    anotarBorrador();
     var ults = $("rq-items").querySelectorAll('[data-c="desc"]');
     if(ults.length) ults[ults.length-1].focus();
   });
@@ -1737,9 +1848,24 @@ VISTA.requisito = function(){
     confirmar:"toque para cargar los renglones",
     alConfirmar:function(a){ cargarExcel(a); }});
   $("rq-guardar").addEventListener("click", guardarReq);
+  $("rq-area").addEventListener("input", anotarBorrador);
+  $("rq-fecha").addEventListener("change", anotarBorrador);
+
+  /* lo que había a medio escribir vuelve a la pantalla */
+  var guardado = borradorGuardado();
+  if(guardado && borradorVacio({items:itemsReq})){
+    itemsReq = guardado.items.slice();
+    if(guardado.fecha) $("rq-fecha").value = guardado.fecha;
+    if(guardado.area)  $("rq-area").value  = guardado.area;
+  }
   if(!itemsReq.length) itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
   pintarItems();
   pintarListaReq();
+  if(typeof nubeHay === "function" && nubeHay() && typeof nubeTraerBorrador === "function"){
+    nubeTraerBorrador().then(function(f){
+      if(f && f.contenido) aplicarBorrador(f.contenido, f.equipo);
+    });
+  }
 };
 
 /* =====================================================================
@@ -1819,6 +1945,7 @@ function pintarItems(){
   for(i2=0;i2<ins.length;i2++) ins[i2].addEventListener("input", function(){
     itemsReq[+this.dataset.i][this.dataset.c] = this.value;
     contarReq();
+    anotarBorrador();
   });
   var sels = $("rq-items").querySelectorAll("select");
   for(i2=0;i2<sels.length;i2++) sels[i2].addEventListener("change", function(){
@@ -1830,10 +1957,11 @@ function pintarItems(){
       return;
     }
     itemsReq[n].und = this.value;
+    anotarBorrador();
   });
   var qs = $("rq-items").querySelectorAll("[data-quitar]");
   for(i2=0;i2<qs.length;i2++) qs[i2].addEventListener("click", function(){
-    itemsReq.splice(+this.dataset.quitar,1); pintarItems();
+    itemsReq.splice(+this.dataset.quitar,1); pintarItems(); anotarBorrador();
   });
   contarReq();
 }
@@ -1905,6 +2033,7 @@ function guardarReq(){
   try{
     bajarBlob("REQUERIMIENTO_" + codigo + ".xlsx", excelRequisito(reg));
   }catch(e){ /* si el navegador no deja bajar, el pedido igual quedó guardado */ }
+  soltarBorrador();
   itemsReq = [{desc:"", und:"und", cant:"", sol:"", frente:"", obs:""}];
   VISTA.requisito();
   var detalle = [];

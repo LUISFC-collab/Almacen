@@ -28,7 +28,8 @@ var NUBE_CLAVE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
    por apuntar a algo que todavía no existe. */
 var NUBE_TABLAS = ["unidades","unidad_alias","consolidado","materiales",
                    "requerimientos","requerimiento_items","guias","guia_lineas",
-                   "herramientas","prestamos","movimientos"];
+                   "herramientas","prestamos","movimientos",
+                   "requerimiento_borradores"];
 
 var Nube = {
   sesion: null,        /* lo que devuelve el servicio de acceso */
@@ -136,6 +137,66 @@ function nubeCrearPerfil(datos){
   }).then(function(){
     return nubeEntrar(datos.fotocheck, datos.clave);
   });
+}
+
+/* ---------------------------------------------------------------------
+   ENTRAR, Y SI LA BASE NO LO CONOCE, DARLO DE ALTA
+
+   Hasta ahora, si la persona existía en la lista de este equipo pero no
+   en la base, la app la dejaba entrar «solo en este equipo» sin decir
+   gran cosa. Trabajaba todo el día creyendo que estaba en línea y nada
+   llegaba a las tablas: es exactamente lo que venía pasando.
+
+   Ahora, cuando la contraseña que escribió es la correcta según este
+   equipo y la base simplemente no tiene esa cuenta todavía, se le crea
+   allá con esas mismas credenciales y se entra en línea. La persona no
+   tiene que hacer ningún trámite aparte, que en obra nadie hace.
+   --------------------------------------------------------------------- */
+function nubeAltaSiHaceFalta(datos){
+  return nubeEntrar(datos.fotocheck, datos.clave).catch(function(e){
+    var m = String((e && e.message) || "");
+    /* solo si la base dice «no conozco esa cuenta». Si dice que la
+       contraseña no coincide, o que espera aprobación, eso se respeta. */
+    if(!/invalid login credentials|invalid_grant|credentials/i.test(m)) throw e;
+    return nubeCrearPerfil(datos);
+  });
+}
+
+/* ---------------------------------------------------------------------
+   EL REQUERIMIENTO A MEDIO ARMAR
+
+   Una fila por persona. Se guarda lo que lleva escrito para que pueda
+   seguir en otro aparato: empieza en el celular en el frente y termina
+   en la laptop de la oficina.
+   --------------------------------------------------------------------- */
+function nubeEquipo(){
+  var a = navigator.userAgent || "";
+  return /Mobi|Android|iPhone|iPad/i.test(a) ? "celular" : "laptop";
+}
+
+function nubeGuardarBorrador(contenido){
+  if(!nubeHay()) return Promise.resolve(null);
+  return nubePedir("/rest/v1/rpc/guardar_borrador", {
+    method: "POST",
+    body: JSON.stringify({p_contenido: contenido || {}, p_equipo: nubeEquipo()})
+  });
+}
+
+function nubeTraerBorrador(){
+  if(!nubeHay() || !Nube.perfil) return Promise.resolve(null);
+  return nubePedir("/rest/v1/requerimiento_borradores?dueno=eq." + Nube.perfil.id +
+                   "&eliminado_en=is.null&select=*&limit=1", {method: "GET"})
+    .then(function(f){ return (f && f[0]) || null; })
+    .catch(function(){ return null; });
+}
+
+/* Al registrar el requerimiento el borrador ya no sirve. Se da de baja,
+   y el disparador de lápida lo deja marcado en vez de borrarlo: así el
+   otro aparato se entera de que ya no está en lugar de revivirlo. */
+function nubeSoltarBorrador(){
+  if(!nubeHay() || !Nube.perfil) return Promise.resolve(null);
+  return nubePedir("/rest/v1/requerimiento_borradores?dueno=eq." + Nube.perfil.id,
+                   {method: "DELETE"}).catch(function(){ return null; });
 }
 
 function nubeMiPerfil(){

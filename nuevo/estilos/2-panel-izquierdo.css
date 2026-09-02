@@ -133,3 +133,11 @@
     cursor:pointer; transition:background .15s, color .15s, border-color .15s; }
   #salir .actualizar:hover{ background:var(--azul-suave); color:var(--azul);
     border-color:var(--azul); }
+
+  /* ---- SOLO EN ESTE EQUIPO ----
+     Es el renglon que explica por que dos aparatos muestran cosas
+     distintas. Mientras diga esto, nada de lo que se registre sale de
+     este navegador, asi que no puede ser un gris mas del riel. */
+  #salir .nube.aislado{ color:#8a2b2b; font-weight:700; letter-spacing:.02em;
+    background:#fdecec; border:1px solid #f3c6c6; border-radius:var(--r-s);
+    padding:6px 8px; margin:0 0 8px; line-height:1.35; }

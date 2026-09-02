@@ -730,9 +730,47 @@ function seguirEntrandoLocal(fc, clave, errorNube){
       ? "El fotocheck o la contraseña no coinciden."
       : "La contraseña no coincide.";
   }
-  $("ac-fc").value = ""; $("ac-clave").value = "";
-  entrar(u.puesto, u.nombre);
-  aviso("Bienvenido, " + u.nombre.split(" ")[0] + ". Solo en este equipo.");
+
+  /* Aquí estaba el agujero por el que no llegaba nada a las tablas.
+     La contraseña era la correcta según este equipo, pero la base no
+     conocía a esta persona, así que se entraba «solo en este equipo» y
+     todo el trabajo del día se quedaba en el navegador. De ahí que un
+     aparato mostrara una cosa y el otro otra, y que el botón de
+     actualizar no tuviera de dónde igualar.
+
+     Ahora se le crea la cuenta en la base con lo que acaba de escribir
+     y se entra en línea. Nadie tiene que hacer un trámite aparte, que
+     en obra no lo hace nadie. */
+  var seguirLocal = function(porque){
+    $("ac-fc").value = ""; $("ac-clave").value = "";
+    entrar(u.puesto, u.nombre);
+    aviso("Bienvenido, " + u.nombre.split(" ")[0] + ". " + (porque || "Solo en este equipo."));
+  };
+
+  var noConoce = !errorNube ||
+    /invalid login credentials|invalid_grant|credentials/i.test(String(errorNube.message || ""));
+
+  if(typeof nubeAltaSiHaceFalta === "function" && noConoce){
+    err.textContent = "Creando su cuenta en la base…";
+    nubeAltaSiHaceFalta({
+      fotocheck: fc, clave: clave, nombre: u.nombre,
+      puesto: u.puesto, celular: u.cel || ""
+    }).then(function(p){
+      err.textContent = "";
+      $("ac-fc").value = ""; $("ac-clave").value = "";
+      entrar(p.puesto || u.puesto, p.nombre || u.nombre);
+      aviso("Bienvenido, " + (p.nombre || u.nombre).split(" ")[0] + ". En línea.");
+      nubeArrancar();
+    }).catch(function(e){
+      err.textContent = "";
+      var m = String((e && e.message) || "");
+      seguirLocal(/aprobad|visto bueno/i.test(m)
+        ? "Su cuenta ya está en la base y espera el visto bueno del administrador."
+        : "La base no la tomó (" + m + "). Por ahora, solo en este equipo.");
+    });
+    return;
+  }
+  seguirLocal(errorNube ? "La base dice: " + errorNube.message : null);
 }
 
 /* =====================================================================
@@ -795,6 +833,15 @@ function nubeBajarYPintar(){
         return {id:x.id, nombre:x.nombre, estado:x.estado, prestamo:null};
       });
     }
+    /* Lo que la persona llevaba escrito en el otro aparato. Se aplica
+       antes de repintar, para que la pantalla salga ya con ello puesto. */
+    if(t.requerimiento_borradores && t.requerimiento_borradores.length &&
+       typeof aplicarBorrador === "function"){
+      var mio = t.requerimiento_borradores.filter(function(b){
+        return !Nube.perfil || b.dueno === Nube.perfil.id;
+      })[0];
+      if(mio && mio.contenido) aplicarBorrador(mio.contenido, mio.equipo);
+    }
     guardar();
     pintarEstadoNube();
     if(typeof VISTA[actual] === "function") VISTA[actual]();
@@ -833,13 +880,40 @@ async function actualizarEsteEquipo(){
   var pend = typeof nubePendientes === "function" ? nubePendientes() : 0;
   var enLinea = typeof nubeHay === "function" && nubeHay();
 
+  /* Sin sesión no hay con qué igualar: no existe copia en la base de la
+     que bajar. Antes el botón limpiaba el caché igual y la persona se
+     quedaba creyendo que había igualado; por eso lo apretaba en los dos
+     aparatos y seguían mostrando cosas distintas. Ahora se dice, y se
+     ofrece lo único que sí se puede hacer aquí, que es traer el
+     programa nuevo. */
+  if(!enLinea){
+    if(!confirm("Este equipo NO está conectado a la base, así que no hay con qué igualarlo.\n\n" +
+                "Lo que ve aquí está guardado solo en este navegador. Para que los equipos " +
+                "muestren lo mismo hay que salir y volver a entrar con fotocheck y " +
+                "contraseña en cada uno.\n\n" +
+                "¿Quiere al menos traer la última versión del programa? Sus datos NO se tocan.")) return;
+    try{
+      if(window.caches){
+        var lls = await caches.keys();
+        for(var q = 0; q < lls.length; q++) await caches.delete(lls[q]);
+      }
+      if(navigator.serviceWorker){
+        var rg = await navigator.serviceWorker.getRegistrations();
+        for(var w = 0; w < rg.length; w++) await rg[w].unregister();
+      }
+    }catch(e){}
+    aviso("Trayendo la última versión del programa…");
+    setTimeout(function(){ location.reload(); }, 600);
+    return;
+  }
+
   if(pend){
     if(!confirm("Hay " + pend + " cosa(s) registrada(s) que todavía no suben a la base.\n\n" +
-                "Si limpia ahora se pierden. ¿Continuar igual?")) return;
-  } else if(!confirm("Se borra lo guardado en este equipo y se vuelve a bajar de la base.\n\n" +
-                     (enLinea ? "Sus datos están en la base, no se pierde nada."
-                              : "OJO: este equipo NO está conectado a la base. Lo que tenga aquí se pierde.") +
-                     "\n\n¿Continuar?")) return;
+                "Si limpia ahora se pierden. Lo sano es esperar a que suban.\n\n" +
+                "Aceptar = limpiar igual y perderlas.")) return;
+  } else if(!confirm("Este equipo se va a quedar solo con lo que hay en la base.\n\n" +
+                     "Se borra la copia local y se vuelve a bajar todo. Sus datos están " +
+                     "en la base, no se pierde nada.\n\n¿Continuar?")) return;
 
   try{
     if(window.caches){
@@ -852,15 +926,19 @@ async function actualizarEsteEquipo(){
     }
   }catch(e){}
 
-  /* La copia local de los datos solo se tira si hay de dónde volver a
-     bajarlos. Sin sesión se limpia únicamente el caché del navegador. */
-  if(enLinea){
-    try{
-      localStorage.removeItem(CLAVE);
-      localStorage.removeItem("almacen_cola_nube");
-    }catch(e){}
-  }
-  aviso("Limpiando este equipo…");
+  /* Se va todo lo que este equipo guardó por su cuenta. Al recargar, la
+     app vuelve a bajar de la base y este aparato queda igual que los
+     demás, que es justo lo que se le pide al botón.
+
+     La sesión se conserva a propósito: si se borrara habría que volver
+     a entrar y no se bajaría nada, o sea lo contrario de lo que pide. */
+  try{
+    localStorage.removeItem(CLAVE);
+    localStorage.removeItem("almacen_cola_nube");
+    localStorage.removeItem("almacen_borrador_req");
+    localStorage.removeItem("almacen_purga_hecha");
+  }catch(e){}
+  aviso("Igualando con la base…");
   setTimeout(function(){ location.reload(); }, 600);
 }
 
@@ -881,8 +959,13 @@ function pintarEstadoNube(){
     p.textContent = "En línea" + (pend ? " · " + pend + " por subir" : "");
     p.className = "nube ok";
   } else {
-    p.textContent = "Solo en este equipo" + (pend ? " · " + pend + " por subir" : "");
-    p.className = "nube";
+    /* Este renglón explica por qué dos aparatos muestran cosas distintas,
+       así que no puede seguir siendo un gris que nadie mira. Mientras
+       diga esto, nada de lo que se registre sale de este navegador. */
+    p.textContent = "SOLO EN ESTE EQUIPO" + (pend ? " · " + pend + " por subir" : "");
+    p.title = "Nada de lo que registre está llegando a la base. Salga y vuelva a entrar " +
+              "con su fotocheck y contraseña para conectarse.";
+    p.className = "nube aislado";
   }
 }
 
