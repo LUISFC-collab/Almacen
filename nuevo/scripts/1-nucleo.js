@@ -1033,7 +1033,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-j";
+  return "2026-09-02-k";
 })();
 
 function textoVersion(){
@@ -1703,7 +1703,10 @@ VISTA.requisito = function(){
   $("zona").innerHTML =
     '<div class="vista"><div class="tarjeta">' +
     "<h2>Nuevo requerimiento</h2>" +
-    '<p class="nota">Lo que pide el frente. Se llena igual que la plantilla de la obra.</p>' +
+    '<p class="nota">Lo que pide el frente. Se llena igual que la plantilla de la obra.' +
+    (pideParaSiMismo()
+      ? " Queda a su nombre: <b>" + esc(quienSoy()) + "</b>."
+      : " Escriba de quién es cada punto; puede haber varios en un mismo pedido.") + "</p>" +
     '<div class="rejilla dos">' +
       '<label class="campo"><span>Área</span><input id="rq-area" value="' + esc(db.area) + '"></label>' +
       '<label class="campo"><span>Fecha del pedido</span><input type="date" id="rq-fecha" value="' + hoy() + '" max="' + hoy() + '"></label>' +
@@ -1732,10 +1735,35 @@ VISTA.requisito = function(){
   pintarListaReq();
 };
 
+/* =====================================================================
+   QUIÉN PIDE
+
+   El supervisor y el capataz piden para sí mismos: son ellos los que
+   están en el frente y los que firman. Hacerles escribir su propio
+   nombre en cada renglón es pedirles que tecleen lo que la app ya sabe.
+
+   La Administradora de Obra y el almacenero es otra cosa: levantan el
+   pedido que otro les encargó de palabra, y por eso ahí sí hay que decir
+   de quién es cada punto. Un mismo requerimiento puede llevar cosas de
+   tres frentes distintos.
+   ===================================================================== */
+function quienSoy(){
+  if(typeof Nube !== "undefined" && Nube.perfil && Nube.perfil.nombre) return Nube.perfil.nombre;
+  var p = null;
+  try{ p = localStorage.getItem("almacen_simple_persona"); }catch(e){}
+  return p || NOMBRE_PUESTO[cargo] || "";
+}
+
+function pideParaSiMismo(){
+  return cargo === "supervisor" || cargo === "capataz";
+}
+
 function pintarItems(){
+  var solo = pideParaSiMismo();
   var html = '<div class="tabla-caja"><table><thead><tr>' +
     "<th>N°</th><th>Descripción</th><th>Und</th><th class='n'>Cantidad</th>" +
-    "<th>Solicitante</th><th>Lugar / frente</th><th>Observaciones</th><th></th></tr></thead><tbody>";
+    (solo ? "" : "<th>Solicitante</th>") +
+    "<th>Lugar / frente</th><th>Observaciones</th><th></th></tr></thead><tbody>";
   for(var i=0;i<itemsReq.length;i++){
     var it = itemsReq[i];
     html += "<tr><td class='n' style='color:var(--tinta3)'>" + (i+1) + "</td>" +
@@ -1743,8 +1771,9 @@ function pintarItems(){
       '<td style="width:140px"><select data-i="' + i + '" data-c="und">' +
         opcionesUnidad(it.und || "und") + "</select></td>" +
       '<td style="width:96px"><input class="n" type="number" min="0" step="0.01" data-i="' + i + '" data-c="cant" value="' + esc(it.cant) + '"></td>' +
-      '<td style="min-width:130px"><input data-i="' + i + '" data-c="sol" value="' + esc(it.sol || "") +
-        '" placeholder="Quién lo pide"></td>' +
+      (solo ? "" :
+        '<td style="min-width:130px"><input data-i="' + i + '" data-c="sol" value="' + esc(it.sol || "") +
+        '" placeholder="Quién lo pide"></td>') +
       '<td style="min-width:130px"><input data-i="' + i + '" data-c="frente" value="' + esc(it.frente) + '" placeholder="Poza 3"></td>' +
       '<td style="min-width:150px"><input data-i="' + i + '" data-c="obs" value="' + esc(it.obs) + '"></td>' +
       '<td><button class="bt chico" type="button" data-quitar="' + i + '">Quitar</button></td></tr>';
@@ -1787,11 +1816,18 @@ function guardarReq(){
      requisito es el resumen de los que aparecen; un punto sin nombre toma
      el del primero que sí lo tenga, para no obligar a repetirlo. */
   var sols = [];
-  buenos.forEach(function(i){
-    var s = String(i.sol || "").trim();
-    if(s && sols.indexOf(s) < 0) sols.push(s);
-  });
-  if(!sols.length) return aviso("Escriba quién lo pide, al menos en un punto.");
+  if(pideParaSiMismo()){
+    /* pide para sí mismo: el solicitante es él, no hay nada que escribir */
+    var yo = quienSoy();
+    buenos.forEach(function(i){ i.sol = yo; });
+    sols = [yo];
+  } else {
+    buenos.forEach(function(i){
+      var s = String(i.sol || "").trim();
+      if(s && sols.indexOf(s) < 0) sols.push(s);
+    });
+    if(!sols.length) return aviso("Escriba quién lo pide, al menos en un punto.");
+  }
   var sol = sols.join(" · "), primero = sols[0];
 
   var codigo = "REQ-" + String(db.requerimientos.length + 1).padStart(3,"0");
