@@ -949,7 +949,10 @@ var PANEL = {
   compras:   ["comprar","despachar","consolidado","inventario"],
   supervisor:["requisito","mispedidos","inventario"],
   capataz:   ["inventario"],
-  admin:     ["puestos","usuarios","consolidado","inventario","kardex","fotos","mantenimiento"]
+  /* El administrador entra a todo: es el que prueba la app y el que
+     desatasca lo que se traba. Sin "revisar" en su panel, un pedido
+     pendiente no tenía dónde verse desde su lado. */
+  admin:     ["puestos","usuarios","revisar","consolidado","inventario","kardex","fotos","mantenimiento"]
 };
 
 var TITULO = {
@@ -1030,7 +1033,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-f";
+  return "2026-09-02-g";
 })();
 
 function textoVersion(){

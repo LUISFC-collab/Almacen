@@ -367,8 +367,13 @@ function guardarEdicion(){
 }
 
 VISTA.revisar = function(){
+  /* Obra los ve todos porque es la primera en revisarlos. El administrador
+     también: si viera solo los que ya pasaron por ella, una pantalla diría
+     tres requerimientos y esta ninguno, sin que nada explique la diferencia.
+     Logística y compras siguen viendo solo lo que Obra ya soltó, que es lo
+     correcto: lo pendiente todavía no es asunto suyo. */
   var mios = db.requerimientos.filter(function(r){
-    if(cargo === "obra") return true;
+    if(cargo === "obra" || cargo === "admin") return true;
     return r.estado !== "pendiente";
   });
 
@@ -397,7 +402,11 @@ VISTA.revisar = function(){
       ? "Revise y páselo a logística. Nada sale de la obra sin su visto bueno."
       : "Dé el visto bueno para que el asistente pueda comprar.") + "</p>" +
     (mios.length
-      ? '<div class="tabla-caja"><table><thead><tr><th>Código</th><th>Fecha</th><th>Solicitante</th>' +
+      ? (cargo !== "obra" && cargo !== "admin" && db.requerimientos.length > mios.length
+          ? '<p class="nota"><b>' + (db.requerimientos.length - mios.length) +
+            "</b> más siguen esperando el visto bueno de la Administradora de Obra.</p>"
+          : "") +
+        '<div class="tabla-caja"><table><thead><tr><th>Código</th><th>Fecha</th><th>Solicitante</th>' +
         '<th class="n">Materiales</th><th>Estado</th><th></th></tr></thead><tbody>' +
         mios.map(function(r){
           var f = FLUJO[r.estado] || FLUJO.pendiente;
@@ -423,7 +432,11 @@ VISTA.revisar = function(){
               }).join("<br>") + "</td></tr>" +
             (editando === r.id ? filaEditor(r) : "");
         }).join("") + "</tbody></table></div>"
-      : '<div class="vacio">No hay pedidos por revisar.</div>') +
+      : '<div class="vacio">' +
+        (db.requerimientos.length
+          ? "Los " + db.requerimientos.length + " requerimiento(s) que hay siguen esperando " +
+            "el visto bueno de la Administradora de Obra."
+          : "Todavía no hay requerimientos.") + "</div>") +
     "</div></div>";
   var vs = $("zona").querySelectorAll("[data-ver]"), k;
   for(k=0;k<vs.length;k++) vs[k].addEventListener("click", function(){
