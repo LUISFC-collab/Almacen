@@ -284,7 +284,8 @@ function filaEditor(r){
     "</div>" +
     '<div class="tabla-caja"><table><thead><tr>' +
       "<th>N°</th><th>Descripción</th><th>Und</th><th class='n'>Cantidad</th>" +
-      "<th>Solicitante</th><th>Lugar / frente</th><th>Observaciones</th><th></th>" +
+      "<th>Solicitante</th><th>Necesario en obra</th><th>Lugar / frente</th>" +
+      "<th>Observaciones</th><th></th>" +
     "</tr></thead><tbody>" +
     itemsEdit.map(function(it, i){
       return "<tr><td class='n' style='color:var(--tinta3)'>" + (i + 1) + "</td>" +
@@ -292,6 +293,8 @@ function filaEditor(r){
         '<td style="width:140px"><select data-e="' + i + '" data-k="und">' + opcionesUnidad(it.und || "und") + "</select></td>" +
         '<td style="width:96px"><input class="n" type="number" min="0" step="0.01" data-e="' + i + '" data-k="cant" value="' + esc(it.cant) + '"></td>' +
         '<td style="min-width:130px"><input data-e="' + i + '" data-k="sol" value="' + esc(it.sol) + '"></td>' +
+        '<td style="width:150px"><input type="date" data-e="' + i + '" data-k="fechaObra" value="' +
+          esc(it.fechaObra || "") + '"></td>' +
         '<td style="min-width:130px"><input data-e="' + i + '" data-k="frente" value="' + esc(it.frente) + '"></td>' +
         '<td style="min-width:150px"><input data-e="' + i + '" data-k="obs" value="' + esc(it.obs) + '"></td>' +
         '<td><button class="bt chico" type="button" data-quita-e="' + i + '">Quitar</button></td></tr>';
@@ -353,8 +356,12 @@ function guardarEdicion(){
   r.frente = frentes.join(" · ");
   r.items = buenos.map(function(i){
     return {desc:String(i.desc).trim(), und:i.und || "und", cant:num(i.cant),
-            sol:String(i.sol || "").trim() || sols[0], frente:String(i.frente || "").trim(),
-            obs:String(i.obs || "").trim()};
+            sol:String(i.sol || "").trim() || sols[0],
+            fechaObra:String(i.fechaObra || "").trim(),
+            frente:String(i.frente || "").trim(),
+            obs:String(i.obs || "").trim(),
+            validado:!!i.validado, motivo:i.motivo || "",
+            devuelto:!!i.devuelto, devueltoEn:i.devueltoEn || null};
   });
 
   var res = aplicarAlConsolidado(r);
@@ -436,6 +443,7 @@ VISTA.revisar = function(){
               vivos.map(function(it){
                 return "· <b>" + esc(it.desc) + "</b> — " + it.cant + " " + esc(it.und) +
                   (it.sol ? " · " + esc(it.sol) : "") +
+                  (it.fechaObra ? " · obra " + fecha(it.fechaObra) : "") +
                   (it.frente ? " · " + esc(it.frente) : "") +
                   (it.obs ? " · <i>" + esc(it.obs) + "</i>" : "");
               }).join("<br>") + "</td></tr>" +
@@ -447,6 +455,24 @@ VISTA.revisar = function(){
   $("zona").innerHTML = html;
   engancharRevisar();
 };
+
+/* Cuándo se necesita en obra, y cuánto falta. Lo que ya venció o vence
+   esta semana va en rojo: es lo que decide qué se compra primero, y en
+   una lista de treinta materiales tiene que saltar a la vista. */
+function urgencia(f){
+  if(!f) return '<span style="color:var(--tinta3)">sin fecha</span>';
+  var hoyD = new Date(hoy() + "T00:00:00");
+  var p = String(f).split("-");
+  var d = new Date(+p[0], +p[1] - 1, +p[2]);
+  var dias = Math.round((d - hoyD) / 86400000);
+  var color = dias < 0 ? "var(--rojo)" : (dias <= 7 ? "var(--ambar, #8a5a00)" : "var(--tinta2)");
+  var cuanto = dias < 0 ? "venció hace " + (-dias) + " d"
+             : dias === 0 ? "es hoy"
+             : dias === 1 ? "mañana"
+             : "en " + dias + " d";
+  return '<span style="color:' + color + '">' + fecha(f) +
+         '<br><small>' + cuanto + "</small></span>";
+}
 
 /* ---------------------------------------------------------------------
    LA TARJETA DEL PEDIDO DEL DÍA
@@ -471,7 +497,8 @@ function tarjetaDelDia(r){
     "</div>" +
     (vivos.length
       ? '<div class="tabla-caja"><table><thead><tr>' +
-        "<th>Material</th><th class='n'>Cantidad</th><th>Solicitante</th><th>Lugar</th>" +
+        "<th>Material</th><th class='n'>Cantidad</th><th>Solicitante</th>" +
+        "<th>Necesario en obra</th><th>Lugar</th>" +
         "<th>Observaciones</th><th></th></tr></thead><tbody>" +
         vivos.map(function(it){
           var k = r.items.indexOf(it);
@@ -479,6 +506,7 @@ function tarjetaDelDia(r){
             "<td><b>" + esc(it.desc) + "</b></td>" +
             "<td class='n'>" + it.cant + " " + esc(it.und) + "</td>" +
             "<td>" + esc(it.sol || "—") + "</td>" +
+            "<td>" + urgencia(it.fechaObra) + "</td>" +
             "<td>" + esc(it.frente || "—") + "</td>" +
             '<td style="min-width:150px">' +
               (it.validado
@@ -958,6 +986,7 @@ function nubeBajarYPintar(){
                   return {desc:i.descripcion, und:i.unidad, cant:Number(i.cantidad),
                           sol:i.solicitante || "", frente:i.frente || "",
                           obs:i.observaciones || "",
+                          fechaObra: i.fecha_requerida || "",
                           validado: !!i.validado,
                           motivo: i.motivo_devolucion || "",
                           devuelto: !!i.devuelto_en,

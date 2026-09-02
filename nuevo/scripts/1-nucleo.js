@@ -1504,7 +1504,7 @@ function excelTodosLosRequisitos(){
     ["Obra:", db.obra, "", "", "", "Descargado:", fecha(new Date().toISOString())],
     ["Requerimientos:", db.requerimientos.length, "", "", "", "Materiales:", totalMaterialesReq()],
     [],
-    ["N°","REQUERIMIENTO","FECHA","DESCRIPCIÓN","UND","CANTIDAD","SOLICITANTE","LUGAR / FRENTE","ÁREA","OBSERVACIONES"]
+    ["N°","REQUERIMIENTO","FECHA","DESCRIPCIÓN","UND","CANTIDAD","SOLICITANTE","NECESARIO EN OBRA","LUGAR / FRENTE","ÁREA","OBSERVACIONES"]
   ];
 
   /* del más antiguo al más nuevo: así se lee como un historial y no al revés */
@@ -1512,8 +1512,9 @@ function excelTodosLosRequisitos(){
   db.requerimientos.slice().reverse().forEach(function(r){
     r.items.forEach(function(i){
       n++;
-      filas.push([n, r.codigo, fecha(r.fecha), i.desc, i.und || "und", num(i.cant),
-                  i.sol || r.solicitante || "", i.frente || "", r.area || db.area || "",
+      filas.push([n, etiquetaReq(r), fecha(r.fecha), i.desc, i.und || "und", num(i.cant),
+                  i.sol || r.solicitante || "", i.fechaObra ? fecha(i.fechaObra) : "",
+                  i.frente || "", r.area || db.area || "",
                   i.obs || ""]);
     });
   });
@@ -1537,12 +1538,13 @@ function excelRequisito(r){
     ["ÁREA :", r.area || db.area, "", "", "", "FECHA DE ENTREGA:", ""],
     ["SUPERVISOR :", r.solicitante],
     [],
-    ["N°","DESCRIPCIÓN","UND","CANTIDAD","ENTREGA","ENTREGA","SOLICITANTE","LUGAR/FRENTE","AUTORIZADO","OBSERVACIONES"],
-    ["","","","SOLICITADA","PARCIAL","TOTAL","","","",""]
+    ["N°","DESCRIPCIÓN","UND","CANTIDAD","ENTREGA","ENTREGA","SOLICITANTE","NECESARIO EN OBRA","LUGAR/FRENTE","AUTORIZADO","OBSERVACIONES"],
+    ["","","","SOLICITADA","PARCIAL","TOTAL","","","","",""]
   ];
   r.items.forEach(function(i, n){
     filas.push([n + 1, i.desc, i.und || "und", num(i.cant), "", "",
-                i.sol || r.solicitante || "", i.frente || "", "", i.obs || ""]);
+                i.sol || r.solicitante || "", i.fechaObra ? fecha(i.fechaObra) : "",
+                i.frente || "", "", i.obs || ""]);
   });
   /* filas en blanco hasta 15, como en la plantilla impresa */
   for(var n = r.items.length; n < 15; n++) filas.push([n + 1, "", "", "", "", "", "", "", "", ""]);
@@ -1893,7 +1895,7 @@ VISTA.requisito = function(){
     tarjetaDevueltos() + "</div>";
 
   $("rq-add").addEventListener("click", function(){
-    itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
+    itemsReq.push({desc:"", und:"und", cant:"", sol:"", fechaObra:"", frente:"", obs:""});
     pintarItems();
     anotarBorrador();
     var ults = $("rq-items").querySelectorAll('[data-c="desc"]');
@@ -2108,6 +2110,7 @@ function pintarItems(){
   var html = '<div class="tabla-caja"><table><thead><tr>' +
     "<th>N°</th><th>Descripción</th><th>Und</th><th class='n'>Cantidad</th>" +
     (solo ? "" : "<th>Solicitante</th>") +
+    "<th>Necesario en obra</th>" +
     "<th>Lugar / frente</th><th>Observaciones</th><th></th></tr></thead><tbody>";
   for(var i=0;i<itemsReq.length;i++){
     var it = itemsReq[i];
@@ -2119,6 +2122,10 @@ function pintarItems(){
       (solo ? "" :
         '<td style="min-width:130px"><input data-i="' + i + '" data-c="sol" value="' + esc(it.sol || "") +
         '" placeholder="Quién lo pide"></td>') +
+      /* Cada material tiene su urgencia: la tubería puede necesitarse el
+         jueves y los guantes en dos semanas. Logística compra por eso. */
+      '<td style="width:150px"><input type="date" data-i="' + i + '" data-c="fechaObra" min="' + hoy() +
+        '" value="' + esc(it.fechaObra || "") + '"></td>' +
       '<td style="min-width:130px"><input data-i="' + i + '" data-c="frente" value="' + esc(it.frente) + '" placeholder="Poza 3"></td>' +
       '<td style="min-width:150px"><input data-i="' + i + '" data-c="obs" value="' + esc(it.obs) + '"></td>' +
       '<td><button class="bt chico" type="button" data-quitar="' + i + '">Quitar</button></td></tr>';
@@ -2190,6 +2197,7 @@ function guardarReq(){
   var puestos = buenos.map(function(i){
     return {desc:i.desc.trim(), und:i.und||"und", cant:num(i.cant),
             sol:String(i.sol || "").trim() || primero,
+            fechaObra:String(i.fechaObra || "").trim(),
             frente:String(i.frente || "").trim(), obs:i.obs, validado:false};
   });
   reg.items = reg.items.concat(puestos);

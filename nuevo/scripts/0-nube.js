@@ -82,15 +82,67 @@ function nubeCabeceras(){
 
 function nubeHay(){ return !!(Nube.sesion && Nube.sesion.access_token); }
 
-function nubePedir(ruta, opciones){
-  var o = opciones || {};
-  o.headers = Object.assign(nubeCabeceras(), o.headers || {});
+/* ---------------------------------------------------------------------
+   RENOVAR EL PASE
+
+   El pase que da el servicio de acceso dura una hora. Cuando vence, la
+   app se quedaba muda: el equipo volvía a «solo en este equipo» y todo
+   lo del resto de la tarde se iba a la cola sin que nadie se enterara.
+   En obra eso son cuatro horas de trabajo que no salieron del celular.
+
+   Junto al pase viene un vale para pedir otro. Aquí se usa: si el
+   servidor contesta que el pase venció, se pide uno nuevo y se repite
+   la petición una sola vez. Una sola, porque si el vale también venció
+   hay que entrar de nuevo y reintentar en bucle solo taparía el
+   problema.
+   --------------------------------------------------------------------- */
+var nubeRenovando = null;
+
+function nubeRenovar(){
+  if(nubeRenovando) return nubeRenovando;
+  var vale = Nube.sesion && Nube.sesion.refresh_token;
+  if(!vale) return Promise.reject(new Error("No hay con qué renovar la sesión."));
+
+  nubeRenovando = fetch(NUBE_URL + "/auth/v1/token?grant_type=refresh_token", {
+    method: "POST",
+    headers: {"apikey": NUBE_CLAVE, "Content-Type": "application/json"},
+    body: JSON.stringify({refresh_token: vale})
+  }).then(function(r){
+    if(!r.ok) throw new Error("La sesión venció y no se pudo renovar.");
+    return r.json();
+  }).then(function(s){
+    Nube.sesion = s;
+    Nube.estado = "en línea";
+    try{ localStorage.setItem("almacen_nube_sesion", JSON.stringify(s)); }catch(e){}
+    nubeRenovando = null;
+    return s;
+  }).catch(function(e){
+    nubeRenovando = null;
+    Nube.sesion = null; Nube.perfil = null; Nube.estado = "sin entrar";
+    try{ localStorage.removeItem("almacen_nube_sesion"); }catch(e2){}
+    throw e;
+  });
+  return nubeRenovando;
+}
+
+function nubePedir(ruta, opciones, yaReintento){
+  var o = Object.assign({}, opciones || {});
+  o.headers = Object.assign(nubeCabeceras(), (opciones && opciones.headers) || {});
   return fetch(NUBE_URL + ruta, o).then(function(r){
     return r.text().then(function(t){
       var d = null;
       try{ d = t ? JSON.parse(t) : null; }catch(e){ d = t; }
       if(!r.ok){
         var msg = (d && (d.message || d.error_description || d.msg)) || ("HTTP " + r.status);
+        /* el pase venció: se renueva y se repite, una sola vez */
+        var venció = (r.status === 401 || r.status === 403) &&
+                     ruta.indexOf("/auth/v1/token") < 0 &&
+                     !yaReintento && Nube.sesion && Nube.sesion.refresh_token;
+        if(venció){
+          return nubeRenovar().then(function(){
+            return nubePedir(ruta, opciones, true);
+          });
+        }
         throw new Error(msg);
       }
       return d;
@@ -223,9 +275,18 @@ function nubeRecordar(){
   Nube.sesion = g;
   return nubeMiPerfil().then(function(p){
     if(p){ Nube.perfil = p; Nube.estado = "en línea"; return p; }
-    Nube.sesion = null;
-    try{ localStorage.removeItem("almacen_nube_sesion"); }catch(e){}
-    return null;
+    /* el pase guardado ya venció: se cambia por uno nuevo con el vale,
+       que es lo normal al abrir la app a la mañana siguiente */
+    return nubeRenovar().then(function(){
+      return nubeMiPerfil().then(function(p2){
+        if(p2){ Nube.perfil = p2; Nube.estado = "en línea"; return p2; }
+        return null;
+      });
+    }).catch(function(){
+      Nube.sesion = null;
+      try{ localStorage.removeItem("almacen_nube_sesion"); }catch(e){}
+      return null;
+    });
   });
 }
 
@@ -287,6 +348,7 @@ function nubeGuardarRequerimiento(r){
                     unidad: i.und || "und", cantidad: num(i.cant),
                     solicitante: i.sol || null, frente: i.frente || null,
                     observaciones: i.obs || null,
+                    fecha_requerida: i.fechaObra || null,
                     validado: !!i.validado,
                     motivo_devolucion: i.motivo || null,
                     devuelto_en: i.devuelto ? (i.devueltoEn || new Date().toISOString()) : null};
