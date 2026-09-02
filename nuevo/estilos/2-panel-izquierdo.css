@@ -141,3 +141,19 @@
   #salir .nube.aislado{ color:#8a2b2b; font-weight:700; letter-spacing:.02em;
     background:#fdecec; border:1px solid #f3c6c6; border-radius:var(--r-s);
     padding:6px 8px; margin:0 0 8px; line-height:1.35; }
+
+  /* ---- Conectar con la base ----
+     Sale pegado al aviso rojo y solo mientras el equipo esta aislado.
+     Es la accion que arregla lo que el aviso denuncia, asi que va
+     ahi mismo y se ve como algo que hay que apretar. */
+  #salir .conectar{ width:100%; margin:0 0 8px; padding:9px 10px; min-height:38px;
+    border-radius:var(--r-s); border:1px solid #8a2b2b; background:#8a2b2b;
+    color:#fff; font-size:12px; font-weight:700; cursor:pointer;
+    transition:background .15s, border-color .15s; }
+  #salir .conectar:hover{ background:#6f2222; border-color:#6f2222; }
+
+  /* ---- Por que no se pudo conectar ----
+     Va debajo del boton, en chico. No es para el uso diario: es para
+     que cuando algo falle se pueda leer y decir que paso. */
+  #salir .motivo{ display:block; margin:0 0 8px; font-size:10.5px; line-height:1.35;
+    color:var(--tinta3); word-break:break-word; }

@@ -695,6 +695,7 @@ function intentarEntrar(){
       err.textContent = "";
       $("ac-fc").value = ""; $("ac-clave").value = "";
       localStorage.setItem("almacen_simple_dueno", fc === FOTOCHECK_DUENO ? "1" : "0");
+      localStorage.setItem("almacen_simple_fc", fc);
       entrar(p.puesto, p.nombre);
       aviso("Bienvenido, " + p.nombre.split(" ")[0] + ". En línea.");
       nubeArrancar();
@@ -714,7 +715,10 @@ var entrandoPorNube = false;
 function seguirEntrandoLocal(fc, clave, errorNube){
   var err = $("ac-err");
   var u = db.usuarios.filter(function(x){ return x.fc === fc; })[0];
-  if(u) localStorage.setItem("almacen_simple_dueno", u.fc === FOTOCHECK_DUENO ? "1" : "0");
+  if(u){
+    localStorage.setItem("almacen_simple_dueno", u.fc === FOTOCHECK_DUENO ? "1" : "0");
+    localStorage.setItem("almacen_simple_fc", u.fc);
+  }
   if(!u){
     err.textContent = db.usuarios.length
       ? "En este equipo no hay ningún perfil con ese fotocheck. Créelo abajo."
@@ -942,6 +946,93 @@ async function actualizarEsteEquipo(){
   setTimeout(function(){ location.reload(); }, 600);
 }
 
+/* =====================================================================
+   CONECTARSE SIN VOLVER A TECLEAR NADA
+
+   La app ya tiene guardado el fotocheck y la contraseña de quien está
+   usándola: son los que escribió al entrar. Si además resulta que no
+   hay sesión con la base, pedirle que salga y vuelva a entrar para
+   escribir otra vez lo mismo es hacerle perder el tiempo, y mientras
+   tanto todo lo que registra se queda en cola.
+
+   Así que la app se conecta sola con lo que ya tiene. Es lo mismo que
+   hace cualquier aplicación que lo mantiene a uno dentro entre una
+   apertura y la siguiente.
+
+   Si falla no se insiste ni se molesta: queda el botón para intentarlo
+   a mano, y el aviso rojo sigue diciendo la verdad.
+   ===================================================================== */
+var conectando = false;
+var ultimoFalloNube = "";
+
+function usuarioDeEsteEquipo(){
+  var quien = null;
+  try{ quien = localStorage.getItem("almacen_simple_persona"); }catch(e){}
+  var fc = null;
+  try{ fc = localStorage.getItem("almacen_simple_fc"); }catch(e){}
+  var lista = (window.db && db.usuarios) || [];
+  var u = fc ? lista.filter(function(x){ return x.fc === fc; })[0] : null;
+  if(!u && quien) u = lista.filter(function(x){ return x.nombre === quien; })[0];
+  return (u && u.fc && u.clave) ? u : null;
+}
+
+function conectarConLoGuardado(silencioso){
+  if(conectando) return Promise.resolve(false);
+  if(typeof nubeHay === "function" && nubeHay()) return Promise.resolve(true);
+  if(typeof nubeAltaSiHaceFalta !== "function") return Promise.resolve(false);
+
+  var u = usuarioDeEsteEquipo();
+  if(!u){
+    if(!silencioso) aviso("Este equipo no tiene guardada su contraseña. Salga y entre con su fotocheck.");
+    return Promise.resolve(false);
+  }
+
+  conectando = true;
+  if(!silencioso) aviso("Conectando con la base…");
+  return nubeAltaSiHaceFalta({
+    fotocheck: u.fc, clave: u.clave, nombre: u.nombre,
+    puesto: u.puesto, celular: u.cel || ""
+  }).then(function(p){
+    conectando = false;
+    try{ localStorage.setItem("almacen_simple_fc", u.fc); }catch(e){}
+    nubeArrancar();
+    pintarEstadoNube();
+    aviso("Conectado. " + (typeof nubePendientes === "function" && nubePendientes()
+      ? "Subiendo lo que estaba en cola…" : "Ya está en línea."));
+    return true;
+  }).catch(function(e){
+    conectando = false;
+    /* El intento callado tambien deja dicho por que fallo. Un fallo que
+       no se ve es un fallo que nadie puede arreglar, y el que abre la
+       app en el cerro no tiene consola para mirarlo. */
+    ultimoFalloNube = (e && e.message) || "sin detalle";
+    pintarEstadoNube();
+    if(!silencioso) aviso("No se pudo conectar: " + ultimoFalloNube);
+    return false;
+  });
+}
+
+/* El botón vive pegado al aviso rojo, que es donde la persona mira
+   cuando algo no aparece. Solo sale si hay con qué conectarse. */
+function ponerBotonConectar(caja){
+  var b = caja.querySelector(".conectar");
+  if(typeof nubeHay === "function" && nubeHay()){
+    if(b) b.remove();
+    return;
+  }
+  if(!usuarioDeEsteEquipo()){ if(b) b.remove(); return; }
+  if(b) return;
+  b = document.createElement("button");
+  b.type = "button";
+  b.className = "conectar";
+  b.textContent = "Conectar con la base";
+  b.title = "Usa el fotocheck y la contraseña que ya tiene guardados en este equipo";
+  b.addEventListener("click", function(){ conectarConLoGuardado(false); });
+  var aviso1 = caja.querySelector(".nube");
+  if(aviso1 && aviso1.nextSibling) caja.insertBefore(b, aviso1.nextSibling);
+  else caja.insertBefore(b, caja.firstChild);
+}
+
 /* El estado va donde la versión: es lo mismo que se mira cuando algo
    no aparece —qué versión tengo y si estoy hablando con la base—. */
 function pintarEstadoNube(){
@@ -967,6 +1058,20 @@ function pintarEstadoNube(){
               "con su fotocheck y contraseña para conectarse.";
     p.className = "nube aislado";
   }
+  ponerBotonConectar(caja);
+
+  /* El porque, en letra chica y solo si lo hay */
+  var m = caja.querySelector(".motivo");
+  if(ultimoFalloNube && !(typeof nubeHay === "function" && nubeHay())){
+    if(!m){
+      m = document.createElement("small");
+      m.className = "motivo";
+      var bt = caja.querySelector(".conectar");
+      if(bt && bt.nextSibling) caja.insertBefore(m, bt.nextSibling);
+      else caja.insertBefore(m, caja.firstChild);
+    }
+    m.textContent = "La base dijo: " + ultimoFalloNube;
+  } else if(m) m.remove();
 }
 
 /* La portada ya no ofrece entrar a mirar sin cuenta: todo el que use la
@@ -1805,7 +1910,15 @@ if(typeof nubeRecordar === "function"){
 }
 
 var guardado = localStorage.getItem("almacen_simple_cargo");
-if(guardado && PANEL[guardado]) entrar(guardado, localStorage.getItem("almacen_simple_persona"));
+if(guardado && PANEL[guardado]){
+  entrar(guardado, localStorage.getItem("almacen_simple_persona"));
+  /* Estaba dentro pero sin sesión con la base: se intenta en silencio con
+     lo que ya está guardado. Es el caso de todos los equipos que venían
+     trabajando antes de que la app supiera hablar con la base. */
+  setTimeout(function(){
+    if(typeof nubeHay === "function" && !nubeHay()) conectarConLoGuardado(true);
+  }, 1200);
+}
 else {
   $("portada").classList.add("ver");
   /* En un equipo recién estrenado nadie tiene cuenta todavía: el recuadro
