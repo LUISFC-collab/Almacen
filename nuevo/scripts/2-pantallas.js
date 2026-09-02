@@ -945,7 +945,16 @@ function simular(k){
   simulando = true;
   cargo = k;
   $("banda").classList.add("ver");
-  $("banda-txt").textContent = "Está viendo la app como " + NOMBRE_PUESTO[k];
+  /* La banda decía solo "está viendo", y eso hacía pensar que era de mirar.
+     No lo es: el administrador puede registrar y corregir en cualquier
+     puesto, que es justamente para lo que sirve. Y dice dónde va a parar
+     lo que escriba, porque no es lo mismo probar contra la base que
+     probar contra este equipo. */
+  var donde = (typeof nubeHay === "function" && nubeHay())
+    ? "Lo que registre aquí se guarda en la base, como si fuera esa persona."
+    : "Lo que registre aquí queda solo en este equipo.";
+  $("banda-txt").textContent = "Está probando la app como " + NOMBRE_PUESTO[k] +
+    " · puede registrar y corregir. " + donde;
   $("quien").innerHTML = "<small>Viendo como</small><b>" + esc(NOMBRE_PUESTO[k]) + "</b>";
   pintarMenu();
   ir(PANEL[k][0]);
