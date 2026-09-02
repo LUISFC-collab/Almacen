@@ -951,9 +951,9 @@ function reunirFotos(){
     meter("Guía", g.fecha, g.transportista || "—", g.numero || "", g.foto);
   });
   (db.requerimientos || []).forEach(function(r){
-    meter("Requisito", r.fecha, r.solicitante || r.quien || "—", r.codigo || "", r.foto);
+    meter("Requerimiento", r.fecha, r.solicitante || r.quien || "—", r.codigo || "", r.foto);
     (r.items || []).forEach(function(it){
-      meter("Requisito", r.fecha, r.solicitante || r.quien || "—", it.desc || "", it.foto);
+      meter("Requerimiento", r.fecha, r.solicitante || r.quien || "—", it.desc || "", it.foto);
     });
   });
 

@@ -891,7 +891,7 @@ function nuevaUnidad(){
 }
 
 var SEC = [
-  {k:"requisito",  t:"Requisito",  ic:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'},
+  {k:"requisito",  t:"Requerimiento",  ic:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'},
   {k:"ingreso",    t:"Ingreso",    ic:'<path d="M12 20V8M7 13l5-5 5 5M5 4h14"/>'},
   {k:"salida",     t:"Salida",     ic:'<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>'},
   {k:"prestamo",   t:"Préstamo",   ic:'<path d="M14.7 6.3a4 4 0 0 0 5 5L15 16l-3.5 3.5a2.1 2.1 0 0 1-3-3L12 13z"/>'},
@@ -953,10 +953,10 @@ var PANEL = {
 };
 
 var TITULO = {
-  requisito:"Requisito de materiales", ingreso:"Ingreso por guía",
+  requisito:"Requerimiento de materiales", ingreso:"Ingreso por guía",
   salida:"Salida al frente", prestamo:"Préstamo de herramientas",
   inventario:"Inventario del almacén", consolidado:"Consolidado de obra",
-  kardex:"Kardex de movimientos", revisar:"Requisitos por revisar",
+  kardex:"Kardex de movimientos", revisar:"Requerimientos por revisar",
   despachar:"Despachar a obra", guia:"Guías emitidas",
   comprar:"Comprar lo aprobado", mispedidos:"Mis pedidos",
   puestos:"Los puestos de la obra",
@@ -1030,7 +1030,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-c";
+  return "2026-09-02-d";
 })();
 
 function textoVersion(){
@@ -1489,12 +1489,12 @@ function bajarBlob(nombre, blob){
    ===================================================================== */
 function excelTodosLosRequisitos(){
   var filas = [
-    ["MATERIALES DE TODOS LOS REQUISITOS REGISTRADOS"],
+    ["MATERIALES DE TODOS LOS REQUERIMIENTOS REGISTRADOS"],
     [],
     ["Obra:", db.obra, "", "", "", "Descargado:", fecha(new Date().toISOString())],
-    ["Requisitos:", db.requerimientos.length, "", "", "", "Materiales:", totalMaterialesReq()],
+    ["Requerimientos:", db.requerimientos.length, "", "", "", "Materiales:", totalMaterialesReq()],
     [],
-    ["N°","REQUISITO","FECHA","DESCRIPCIÓN","UND","CANTIDAD","SOLICITANTE","LUGAR / FRENTE","ÁREA","OBSERVACIONES"]
+    ["N°","REQUERIMIENTO","FECHA","DESCRIPCIÓN","UND","CANTIDAD","SOLICITANTE","LUGAR / FRENTE","ÁREA","OBSERVACIONES"]
   ];
 
   /* del más antiguo al más nuevo: así se lee como un historial y no al revés */
@@ -1699,7 +1699,7 @@ var itemsReq = [];
 VISTA.requisito = function(){
   $("zona").innerHTML =
     '<div class="vista"><div class="tarjeta">' +
-    "<h2>Nuevo requisito</h2>" +
+    "<h2>Nuevo requerimiento</h2>" +
     '<p class="nota">Lo que pide el frente. Se llena igual que la plantilla de la obra.</p>' +
     '<div class="rejilla dos">' +
       '<label class="campo"><span>Área</span><input id="rq-area" value="' + esc(db.area) + '"></label>' +
@@ -1710,9 +1710,9 @@ VISTA.requisito = function(){
     '<div class="botones">' +
     botonArchivo("rq-archivo", "Subir desde Excel", ".xlsx,.csv") + "</div>" +
     '<div id="rq-items" style="margin-top:12px"></div>' +
-    '<div class="botones"><button class="bt pri" type="button" id="rq-guardar">Registrar requisito</button></div>' +
+    '<div class="botones"><button class="bt pri" type="button" id="rq-guardar">Registrar requerimiento</button></div>' +
     "</div>" +
-    '<div class="tarjeta"><h2>Requisitos registrados</h2><div id="rq-lista"></div></div></div>';
+    '<div class="tarjeta"><h2>Requerimientos registrados</h2><div id="rq-lista"></div></div></div>';
 
   $("rq-add").addEventListener("click", function(){
     itemsReq.push({desc:"", und:"und", cant:"", sol:"", frente:"", obs:""});
@@ -1835,7 +1835,7 @@ function guardarReq(){
   guardar();
   var reg = db.requerimientos[0];
   try{
-    bajarBlob("REQUISITO_" + codigo + ".xlsx", excelRequisito(reg));
+    bajarBlob("REQUERIMIENTO_" + codigo + ".xlsx", excelRequisito(reg));
   }catch(e){ /* si el navegador no deja bajar, el pedido igual quedó guardado */ }
   itemsReq = [{desc:"", und:"und", cant:"", sol:"", frente:"", obs:""}];
   VISTA.requisito();
@@ -1848,15 +1848,20 @@ function guardarReq(){
 
 function pintarListaReq(){
   if(!db.requerimientos.length){
-    $("rq-lista").innerHTML = '<div class="vacio">Todavía no hay requisitos.</div>'; return;
+    $("rq-lista").innerHTML = '<div class="vacio">Todavía no hay requerimientos.</div>'; return;
   }
+  /* Un solo Excel, arriba, que baja todo lo registrado. Antes había uno por
+     fila y otro general: doce requerimientos daban trece botones de Excel y
+     ninguno decía cuál bajaba la lista completa. En la fila queda Quitar,
+     que es lo que de verdad se necesita ahí. */
+  var nReq = db.requerimientos.length, nMat = totalMaterialesReq();
   $("rq-lista").innerHTML =
-    '<div class="botones" style="margin:0 0 12px">' +
-      '<button class="bt pri" type="button" id="rq-xls-todo">Excel de todo lo registrado</button>' +
-      '<span class="der" style="font-size:12.5px;color:var(--tinta2)">' +
-        db.requerimientos.length + (db.requerimientos.length === 1 ? " requisito · " : " requisitos · ") +
-        totalMaterialesReq() + (totalMaterialesReq() === 1 ? " material" : " materiales") +
+    '<div class="botones" style="margin:0 0 12px;align-items:center">' +
+      '<span style="font-size:12.5px;color:var(--tinta2)">' +
+        nReq + (nReq === 1 ? " requerimiento · " : " requerimientos · ") +
+        nMat + (nMat === 1 ? " material" : " materiales") +
       "</span>" +
+      '<button class="bt pri der" type="button" id="rq-xls-todo">Descargar Excel</button>' +
     "</div>" +
     '<div class="tabla-caja"><table><thead><tr>' +
     "<th>Código</th><th>Fecha</th><th>Solicitante</th><th>Frente</th><th class='n'>Materiales</th><th></th>" +
@@ -1865,22 +1870,68 @@ function pintarListaReq(){
       return "<tr><td><b>" + esc(r.codigo) + "</b></td><td>" + fecha(r.fecha) + "</td>" +
         "<td>" + esc(r.solicitante) + "</td><td>" + esc(r.frente || "—") + "</td>" +
         "<td class='n'>" + r.items.length + "</td>" +
-        '<td style="width:1%"><button class="bt chico" type="button" data-xls="' + r.id +
-        '">Excel</button></td></tr>';
+        '<td style="width:1%"><button class="bt chico" type="button" data-quitar-req="' + r.id +
+        '">Quitar</button></td></tr>';
     }).join("") + "</tbody></table></div>";
 
   $("rq-xls-todo").addEventListener("click", function(){
-    bajarBlob("REQUISITOS_TODOS_" + hoy() + ".xlsx", excelTodosLosRequisitos());
+    bajarBlob("REQUERIMIENTOS_" + hoy() + ".xlsx", excelTodosLosRequisitos());
     aviso("Excel con " + totalMaterialesReq() + " materiales de " +
-          db.requerimientos.length + " requisitos.");
+          db.requerimientos.length + " requerimientos.");
   });
 
-  var xs = $("rq-lista").querySelectorAll("[data-xls]"), i;
-  for(i=0;i<xs.length;i++) xs[i].addEventListener("click", function(){
-    var r = db.requerimientos.filter(function(x){ return x.id === this.dataset.xls; }.bind(this))[0];
-    bajarBlob("REQUISITO_" + r.codigo + ".xlsx", excelRequisito(r));
-    aviso("Excel de " + r.codigo + " descargado.");
+  var qs = $("rq-lista").querySelectorAll("[data-quitar-req]"), i;
+  for(i=0;i<qs.length;i++) qs[i].addEventListener("click", function(){
+    quitarRequerimiento(this.dataset.quitarReq);
   });
+}
+
+/* =====================================================================
+   QUITAR UN REQUERIMIENTO
+
+   No basta con sacarlo de la lista: al registrarlo se le sumó lo pedido
+   al consolidado, y si eso se queda la obra parece necesitar cosas que
+   nadie pidió. Aquí se deshace todo lo que ese requerimiento hizo.
+
+   Lo que se devuelve:
+     · la cantidad que le sumó a cada renglón del consolidado
+     · su anotación en la lista de quién pidió qué
+     · los renglones que existían SOLO por él —los adicionales que creó
+       y que nadie más pidió— siempre que todavía no se haya comprado ni
+       entregado nada de ellos; si ya se compró, el renglón se queda,
+       porque el material está en el almacén y hay que poder verlo.
+   ===================================================================== */
+function quitarRequerimiento(id){
+  var r = db.requerimientos.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  if(!confirm("¿Quitar el requerimiento " + r.codigo + "?\n\nSe descuenta del consolidado lo que había pedido. No se puede deshacer.")) return;
+
+  var devueltos = 0, borrados = 0;
+  db.consolidado = db.consolidado.filter(function(c){
+    if(!c.pedidos || !c.pedidos.length) return true;
+    var mios = c.pedidos.filter(function(p){ return p.req === r.codigo; });
+    if(!mios.length) return true;
+
+    var suma = 0;
+    mios.forEach(function(p){ suma += num(p.cant); });
+    c.requerido = Math.round(Math.max(0, num(c.requerido) - suma) * 100) / 100;
+    c.pedidos = c.pedidos.filter(function(p){ return p.req !== r.codigo; });
+    devueltos += suma;
+
+    /* nació de este requerimiento, nadie más lo pidió y no se movió nada */
+    if(c.adicional && !c.pedidos.length && !num(c.comprado) && !num(c.entregado)){
+      borrados++;
+      return false;
+    }
+    return true;
+  });
+
+  db.requerimientos = db.requerimientos.filter(function(x){ return x.id !== id; });
+  guardar();
+  pintarListaReq();
+  aviso("Quitado " + r.codigo + ". Se devolvieron " +
+        (Math.round(devueltos * 100) / 100) + " al consolidado" +
+        (borrados ? " y se sacaron " + borrados + " renglón(es) que solo existían por él" : "") + ".");
 }
 
 /* ---------- INGRESO ---------- */
