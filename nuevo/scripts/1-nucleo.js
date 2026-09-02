@@ -1030,7 +1030,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-e";
+  return "2026-09-02-f";
 })();
 
 function textoVersion(){
@@ -1817,6 +1817,18 @@ function guardarReq(){
   var sumados = res.sumados, nuevos = res.nuevos;
 
   guardar();
+
+  /* y a la base, si esta persona entró con su cuenta. Si falla —o si no
+     hay señal— queda anotado y se reintenta solo: lo que no puede pasar
+     es que el pedido se pierda porque el servidor no contestó. */
+  if(typeof nubeHay === "function" && nubeHay()){
+    nubeGuardarRequerimiento(reg).catch(function(e){
+      nubeEncolar("requerimiento", reg);
+      aviso("Guardado aquí. La base no lo tomó: " + e.message);
+    });
+  } else if(typeof nubeEncolar === "function"){
+    nubeEncolar("requerimiento", reg);
+  }
   try{
     bajarBlob("REQUERIMIENTO_" + codigo + ".xlsx", excelRequisito(reg));
   }catch(e){ /* si el navegador no deja bajar, el pedido igual quedó guardado */ }
@@ -1943,6 +1955,12 @@ function quitarRequerimiento(id){
   var d = revertirDelConsolidado(r.codigo);
   db.requerimientos = db.requerimientos.filter(function(x){ return x.id !== id; });
   guardar();
+
+  if(typeof nubeHay === "function" && nubeHay()){
+    nubeQuitarRequerimiento(r).catch(function(){ nubeEncolar("quitar", r); });
+  } else if(typeof nubeEncolar === "function"){
+    nubeEncolar("quitar", r);
+  }
   pintarListaReq();
   aviso("Quitado " + r.codigo + ". Se devolvieron " + d.devueltos + " al consolidado" +
         (d.borrados ? " y se sacaron " + d.borrados + " renglón(es) que solo existían por él" : "") + ".");

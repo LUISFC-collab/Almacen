@@ -116,3 +116,10 @@
      menú. Tabular para que los números no bailen entre una fecha y otra. */
   #salir .version{ margin:0 0 8px; font-size:11px; color:var(--tinta3);
     letter-spacing:.02em; font-variant-numeric:tabular-nums; text-align:center; }
+
+  /* ---- Si está hablando con la base, o solo con este equipo ----
+     Va junto a la versión porque se miran juntas: cuando algo no
+     aparece, lo primero es saber si este equipo está en línea. */
+  #salir .nube{ margin:0 0 4px; font-size:11px; text-align:center;
+    color:var(--tinta3); letter-spacing:.02em; }
+  #salir .nube.ok{ color:var(--verde); font-weight:600; }

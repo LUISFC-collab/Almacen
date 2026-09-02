@@ -621,11 +621,47 @@ function crearPerfil(){
      su cuenta lleva los dos, y elige cuál usar desde el propio panel */
   if(fc === FOTOCHECK_DUENO){ puesto = "almacenero"; localStorage.setItem("almacen_simple_dueno","1"); }
   else localStorage.setItem("almacen_simple_dueno","0");
-  db.usuarios.push({id:uid(), nombre:nombre, cel:cel, fc:fc, clave:clave, puesto:puesto,
-                    creado:new Date().toISOString()});
-  guardar();
+
+  /* La cuenta se crea en la base, que es donde debe vivir: así sirve en
+     el celular y en la computadora. La contraseña la guarda cifrada el
+     servicio de acceso; aquí no queda copia de ella.
+
+     Si la base no contesta —sin señal, o todavía sin montar— se crea
+     solo en este equipo, como hasta ahora, y la persona puede trabajar
+     igual. Volver a registrarse con señal la crea allá. */
+  if(typeof nubeCrearPerfil === "function"){
+    $("al-err").textContent = "Creando su cuenta…";
+    nubeCrearPerfil({nombre:nombre, puesto:puesto, celular:cel, fotocheck:fc, clave:clave})
+      .then(function(p){
+        $("al-err").textContent = "";
+        entrar(p.puesto, p.nombre);
+        aviso("Listo, " + p.nombre.split(" ")[0] + ". Su cuenta sirve en cualquier equipo.");
+        nubeArrancar();
+      })
+      .catch(function(e){
+        $("al-err").textContent = "";
+        if(/already registered|ya existe|User already/i.test(e.message || "")){
+          return altaSoloLocal(nombre, cel, fc, clave, puesto,
+            "Ese fotocheck ya tiene cuenta en la base. Entre con su contraseña.");
+        }
+        altaSoloLocal(nombre, cel, fc, clave, puesto,
+          "Creada solo en este equipo. La base no contestó: " + e.message);
+      });
+    return;
+  }
+  altaSoloLocal(nombre, cel, fc, clave, puesto, null);
+}
+
+function altaSoloLocal(nombre, cel, fc, clave, puesto, motivo){
+  if(db.usuarios.some(function(u){ return u.fc === fc; })){
+    if(motivo) return aviso(motivo);
+  } else {
+    db.usuarios.push({id:uid(), nombre:nombre, cel:cel, fc:fc, clave:clave, puesto:puesto,
+                      creado:new Date().toISOString()});
+    guardar();
+  }
   entrar(puesto, nombre);
-  aviso("Listo, " + nombre.split(" ")[0] + ". Su fotocheck es su acceso.");
+  aviso(motivo || ("Listo, " + nombre.split(" ")[0] + ". Su fotocheck es su acceso."));
 }
 
 function intentarEntrar(){
@@ -633,6 +669,37 @@ function intentarEntrar(){
   var clave = $("ac-clave").value;
   var err = $("ac-err");
   err.textContent = "";
+
+  /* Primero se prueba contra la base: si esa persona tiene cuenta allá,
+     su perfil y su puesto son los de la base, iguales en todos los
+     equipos. Solo si la base no la conoce —o no hay señal— se busca en
+     la lista de este equipo, que es lo que había hasta ahora. */
+  if(typeof nubeEntrar === "function" && fc && clave && !entrandoPorNube){
+    entrandoPorNube = true;
+    err.textContent = "Comprobando…";
+    nubeEntrar(fc, clave).then(function(p){
+      entrandoPorNube = false;
+      err.textContent = "";
+      $("ac-fc").value = ""; $("ac-clave").value = "";
+      localStorage.setItem("almacen_simple_dueno", fc === FOTOCHECK_DUENO ? "1" : "0");
+      entrar(p.puesto, p.nombre);
+      aviso("Bienvenido, " + p.nombre.split(" ")[0] + ". En línea.");
+      nubeArrancar();
+    }).catch(function(e){
+      entrandoPorNube = false;
+      err.textContent = "";
+      /* la base dijo que no; se sigue con la lista local */
+      seguirEntrandoLocal(fc, clave, e);
+    });
+    return;
+  }
+  seguirEntrandoLocal(fc, clave, null);
+}
+
+var entrandoPorNube = false;
+
+function seguirEntrandoLocal(fc, clave, errorNube){
+  var err = $("ac-err");
   var u = db.usuarios.filter(function(x){ return x.fc === fc; })[0];
   if(u) localStorage.setItem("almacen_simple_dueno", u.fc === FOTOCHECK_DUENO ? "1" : "0");
   if(!u){
@@ -645,10 +712,102 @@ function intentarEntrar(){
     setTimeout(function(){ if($("al-nombre")) $("al-nombre").focus(); }, 120);
     return;
   }
-  if(u.clave !== clave) return err.textContent = "La contraseña no coincide.";
+  if(u.clave !== clave){
+    return err.textContent = errorNube && /invalid|credenciales|password/i.test(errorNube.message)
+      ? "El fotocheck o la contraseña no coinciden."
+      : "La contraseña no coincide.";
+  }
   $("ac-fc").value = ""; $("ac-clave").value = "";
   entrar(u.puesto, u.nombre);
-  aviso("Bienvenido, " + u.nombre.split(" ")[0] + ".");
+  aviso("Bienvenido, " + u.nombre.split(" ")[0] + ". Solo en este equipo.");
+}
+
+/* =====================================================================
+   ARRANCAR LA NUBE
+
+   Se llama al entrar con cuenta de la base. Baja lo que hay, abre el
+   canal de tiempo real y sube lo que se hubiera quedado pendiente.
+   ===================================================================== */
+function nubeArrancar(){
+  if(typeof nubeHay !== "function" || !nubeHay()) return;
+
+  Nube.alCambiar = function(tabla){
+    /* Llega el aviso de que algo cambió allá. Se vuelve a bajar en vez de
+       aplicar el cambio suelto: son pocos cientos de filas y así no hay
+       forma de que la copia de aquí se desvíe de la de la base. */
+    clearTimeout(Nube._t);
+    Nube._t = setTimeout(nubeBajarYPintar, 400);
+  };
+  nubeEscuchar();
+  nubeSubirPendientes().then(function(x){
+    if(x.subidos) aviso("Se subieron " + x.subidos + " pendiente(s).");
+  });
+  nubeBajarYPintar();
+  pintarEstadoNube();
+}
+
+function nubeBajarYPintar(){
+  return nubeTraerTodo().then(function(t){
+    if(!t) return;
+    /* Los requerimientos de la base mandan sobre los de este equipo:
+       allá está lo que ven todos. Lo local que aún no subió sigue en la
+       cola y se reintenta aparte. */
+    if(t.requerimientos && t.requerimiento_items){
+      var porId = {};
+      t.requerimiento_items.forEach(function(i){
+        (porId[i.requerimiento_id] = porId[i.requerimiento_id] || []).push(i);
+      });
+      db.requerimientos = t.requerimientos.map(function(r){
+        var items = (porId[r.id] || []).sort(function(a,b){ return (a.orden||0)-(b.orden||0); });
+        return {id:r.id, nubeId:r.id, codigo:r.codigo, fecha:r.fecha,
+                solicitante:r.solicitante, area:r.area || "", frente:r.frente || "",
+                estado:r.estado,
+                items:items.map(function(i){
+                  return {desc:i.descripcion, und:i.unidad, cant:Number(i.cantidad),
+                          sol:i.solicitante || "", frente:i.frente || "",
+                          obs:i.observaciones || ""};
+                })};
+      });
+    }
+    if(t.consolidado && t.consolidado.length){
+      db.consolidado = t.consolidado.map(function(c){
+        return {id:c.id, codigo:c.codigo, desc:c.descripcion, unidad:c.unidad,
+                requerido:Number(c.requerido), comprado:Number(c.comprado),
+                entregado:Number(c.entregado), adicional:!!c.adicional,
+                pedidos:[]};
+      });
+    }
+    if(t.herramientas && t.herramientas.length){
+      db.herramientas = t.herramientas.map(function(x){
+        return {id:x.id, nombre:x.nombre, estado:x.estado, prestamo:null};
+      });
+    }
+    guardar();
+    pintarEstadoNube();
+    if(typeof VISTA[actual] === "function") VISTA[actual]();
+    pintarMenu();
+  }).catch(function(){});
+}
+
+/* El estado va donde la versión: es lo mismo que se mira cuando algo
+   no aparece —qué versión tengo y si estoy hablando con la base—. */
+function pintarEstadoNube(){
+  var caja = $("salir");
+  if(!caja) return;
+  var p = caja.querySelector(".nube");
+  if(!p){
+    p = document.createElement("p");
+    p.className = "nube";
+    caja.insertBefore(p, caja.firstChild);
+  }
+  var pend = typeof nubePendientes === "function" ? nubePendientes() : 0;
+  if(typeof nubeHay === "function" && nubeHay()){
+    p.textContent = "En línea" + (pend ? " · " + pend + " por subir" : "");
+    p.className = "nube ok";
+  } else {
+    p.textContent = "Solo en este equipo" + (pend ? " · " + pend + " por subir" : "");
+    p.className = "nube";
+  }
 }
 
 /* La portada ya no ofrece entrar a mirar sin cuenta: todo el que use la
@@ -700,6 +859,7 @@ function entrar(k, persona){
   $("quien").innerHTML = "<small>" + esc(NOMBRE_PUESTO[k]) + "</small><b>" + esc(quien) + "</b>";
   pintarMenu();
   pintarSombreros();
+  if(typeof pintarEstadoNube === "function") pintarEstadoNube();
   ir(PANEL[k][0]);
 }
 
@@ -725,6 +885,7 @@ function volverAdmin(){
 }
 
 function salir(){
+  if(typeof nubeSalir === "function") nubeSalir();
   localStorage.removeItem("almacen_simple_cargo");
   localStorage.removeItem("almacen_simple_persona");
   localStorage.removeItem("almacen_simple_dueno");
@@ -1343,6 +1504,17 @@ VISTA.mantenimiento = function(){
 
   pintar();
 };
+
+/* Si la persona ya había entrado con su cuenta de la base, se retoma sin
+   pedirle nada: en obra se abre la app veinte veces al día. */
+if(typeof nubeRecordar === "function"){
+  nubeRecordar().then(function(p){
+    if(!p) return;
+    localStorage.setItem("almacen_simple_dueno", p.fotocheck === FOTOCHECK_DUENO ? "1" : "0");
+    entrar(p.puesto, p.nombre);
+    nubeArrancar();
+  }).catch(function(){});
+}
 
 var guardado = localStorage.getItem("almacen_simple_cargo");
 if(guardado && PANEL[guardado]) entrar(guardado, localStorage.getItem("almacen_simple_persona"));
