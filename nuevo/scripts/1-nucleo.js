@@ -666,11 +666,17 @@ function semilla(){
        va en claro porque así trabaja esta página mientras no esté la base
        —lo mismo que hace con las que se crean a mano—; cámbielas cuando
        Supabase esté conectado y las guarde cifradas. */
+    /* La obra tiene varios proyectos a la vez y cada supervisor trabaja en
+       el suyo. Quien lleva logística los ve todos, porque compra para
+       todos: por eso existe "todos" como asignación, no como truco. */
+    proyectos:[
+      {id:"p-floculante", nombre:"Reposición del sistema de floculante", creado:new Date().toISOString()}
+    ],
     usuarios:[
       {id:uid(), nombre:"Joshua Amasifuén", cel:"", fc:"1352992", clave:"Joshua7280",
-       puesto:"almacenero", creado:new Date().toISOString()},
+       puesto:"almacenero", proyecto:"todos", creado:new Date().toISOString()},
       {id:uid(), nombre:"Luis", cel:"", fc:"1332751", clave:"Lu1332751",
-       puesto:"admin", creado:new Date().toISOString()}
+       puesto:"admin", proyecto:"todos", creado:new Date().toISOString()}
     ],
     requerimientos:[],
     guias:[
@@ -711,6 +717,7 @@ function guardar(){ try{ localStorage.setItem(CLAVE, JSON.stringify(db)); }catch
     db.consolidado = fresca.consolidado;
     cambio = true;
   }
+  if(!db.proyectos || !db.proyectos.length){ db.proyectos = fresca.proyectos; cambio = true; }
   if(asegurarAdmins()) cambio = true;
   if(cambio) guardar();
 })();
@@ -1033,7 +1040,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-k";
+  return "2026-09-02-l";
 })();
 
 function textoVersion(){
@@ -1747,6 +1754,33 @@ VISTA.requisito = function(){
    de quién es cada punto. Un mismo requerimiento puede llevar cosas de
    tres frentes distintos.
    ===================================================================== */
+/* =====================================================================
+   LOS PROYECTOS
+
+   Cada persona trabaja en uno. Logística y la administración necesitan
+   ver los de todos, y para eso está la asignación "todos": no es un
+   permiso especial escondido, es una opción más de la lista.
+   ===================================================================== */
+function proyectosVivos(){
+  return (db.proyectos || []).slice();
+}
+
+function nombreProyecto(id){
+  if(id === "todos" || !id) return "Todos los proyectos";
+  var p = (db.proyectos || []).filter(function(x){ return x.id === id; })[0];
+  return p ? p.nombre : "—";
+}
+
+function opcionesProyecto(sel){
+  var html = '<option value="todos"' + (sel === "todos" || !sel ? " selected" : "") +
+             ">Todos los proyectos</option>";
+  proyectosVivos().forEach(function(p){
+    html += '<option value="' + esc(p.id) + '"' + (sel === p.id ? " selected" : "") +
+            ">" + esc(p.nombre) + "</option>";
+  });
+  return html;
+}
+
 function quienSoy(){
   if(typeof Nube !== "undefined" && Nube.perfil && Nube.perfil.nombre) return Nube.perfil.nombre;
   var p = null;

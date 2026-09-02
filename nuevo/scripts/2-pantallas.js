@@ -1177,6 +1177,9 @@ VISTA.usuarios = function(){
       lista.sort(function(a,b){
         return String(NOMBRE_PUESTO[a.puesto] || a.puesto)
           .localeCompare(String(NOMBRE_PUESTO[b.puesto] || b.puesto), "es"); });
+    else if(usuOrden === "proyecto")
+      lista.sort(function(a,b){
+        return nombreProyecto(a.proyecto).localeCompare(nombreProyecto(b.proyecto), "es"); });
     else if(usuOrden === "fecha")
       lista.sort(function(a,b){ return String(b.creado || "").localeCompare(String(a.creado || "")); });
     else if(usuOrden === "fotocheck")
@@ -1186,12 +1189,13 @@ VISTA.usuarios = function(){
     lista.forEach(function(u){ porPuesto[u.puesto] = (porPuesto[u.puesto] || 0) + 1; });
 
     $("zona").innerHTML = '<div class="vista">' +
+      tarjetaProyectos() +
       '<div class="tarjeta">' +
         "<h2>Quién está en la aplicación</h2>" +
-        '<p class="nota">Los perfiles de <b>este equipo</b>. Desde aquí se cambia el ' +
-        "puesto de cada uno —quién es la Administradora de Obra, quién el Jefe de " +
-        "Logística—, y eso decide qué ve al entrar. Mientras la app no esté conectada " +
-        "a la base, cada computadora y cada celular lleva su propia lista.</p>" +
+        '<p class="nota">Desde aquí se cambia el puesto y el proyecto de cada uno, se ' +
+        "les da una contraseña nueva si la olvidaron, y se quita a quien ya no está en " +
+        "la obra. Mientras la app no esté conectada a la base, cada equipo lleva su " +
+        "propia lista.</p>" +
         '<div class="cifras">' +
           '<div class="cifra"><b>' + lista.length + "</b><small>perfiles</small></div>" +
           Object.keys(porPuesto).map(function(k){
@@ -1203,6 +1207,7 @@ VISTA.usuarios = function(){
         '<select id="us-orden">' +
           op("nombre", "Nombre", usuOrden) +
           op("puesto", "Puesto", usuOrden) +
+          op("proyecto", "Proyecto", usuOrden) +
           op("fotocheck", "N° de fotocheck", usuOrden) +
           op("fecha", "Fecha de alta, la más nueva primero", usuOrden) +
         "</select></label>" +
@@ -1211,42 +1216,39 @@ VISTA.usuarios = function(){
       '<div class="tarjeta">' +
         (lista.length
           ? '<div class="tabla-caja"><table><thead><tr>' +
-            "<th>Nombre</th><th>Puesto</th><th>Fotocheck</th><th>Celular</th>" +
-            "<th>Contraseña</th><th>Alta</th></tr></thead><tbody>" +
+            "<th>Nombre</th><th>Puesto</th><th>Proyecto</th><th>Fotocheck</th><th>Celular</th>" +
+            "<th>Contraseña</th><th>Alta</th><th></th></tr></thead><tbody>" +
             lista.map(fila).join("") + "</tbody></table></div>"
           : '<p class="nota">Todavía no hay ningún perfil en este equipo.</p>') +
       "</div></div>";
 
-    $("us-orden").addEventListener("change", function(){ usuOrden = this.value; pintar(); });
+    enganchar();
+  }
 
-    var bs = $("zona").querySelectorAll("[data-ver-clave]");
-    for(var i = 0; i < bs.length; i++){
-      bs[i].addEventListener("click", function(){
-        var fc = this.dataset.verClave;
-        usuVistas[fc] = !usuVistas[fc];
-        pintar();
-      });
-    }
-
-    /* Cambiar el puesto cambia lo que esa persona ve al entrar. Su propia
-       cuenta no aparece como desplegable: el administrador quitándose a sí
-       mismo el mando dejaría la app sin quien la administre. */
-    var ss = $("zona").querySelectorAll("[data-puesto-de]");
-    for(var j = 0; j < ss.length; j++){
-      ss[j].addEventListener("change", function(){
-        var fc = this.dataset.puestoDe, nuevo = this.value, k;
-        for(k = 0; k < db.usuarios.length; k++){
-          if(db.usuarios[k].fc === fc){
-            db.usuarios[k].puesto = nuevo;
-            guardar();
-            aviso(db.usuarios[k].nombre.split(" ")[0] + " ahora entra como " +
-                  (NOMBRE_PUESTO[nuevo] || nuevo) + ".");
-            break;
-          }
-        }
-        pintar();
-      });
-    }
+  /* ---- Los proyectos de la obra ---- */
+  function tarjetaProyectos(){
+    var ps = proyectosVivos();
+    return '<div class="tarjeta">' +
+      "<h2>Proyectos de la obra</h2>" +
+      '<p class="nota">Cada supervisor trabaja en uno. Los que llevan logística y ' +
+      "administración se ponen en <b>Todos los proyectos</b>, porque compran y revisan " +
+      "para la obra entera.</p>" +
+      (ps.length
+        ? '<div class="tabla-caja"><table><thead><tr><th>Proyecto</th>' +
+          '<th class="n">Personas</th><th></th></tr></thead><tbody>' +
+          ps.map(function(p){
+            var cuantos = (db.usuarios || []).filter(function(u){ return u.proyecto === p.id; }).length;
+            return "<tr><td><input data-proy=\"" + esc(p.id) + "\" value=\"" + esc(p.nombre) +
+              "\" style=\"min-width:260px\"></td>" +
+              "<td class='n'>" + cuantos + "</td>" +
+              '<td style="width:1%"><button class="bt chico" type="button" data-quita-proy="' +
+              esc(p.id) + '">Quitar</button></td></tr>';
+          }).join("") + "</tbody></table></div>"
+        : '<p class="nota">Todavía no hay proyectos.</p>') +
+      '<div class="botones" style="margin-top:11px">' +
+        '<input id="pr-nuevo" placeholder="Nombre del proyecto nuevo" style="flex:1;min-width:220px">' +
+        '<button class="bt pri" type="button" id="pr-agregar">Agregar proyecto</button>' +
+      "</div></div>";
   }
 
   function op(v, t, sel){
@@ -1254,35 +1256,149 @@ VISTA.usuarios = function(){
   }
 
   function fila(u){
-    var esAdmin = u.fc === FOTOCHECK_DUENO || u.puesto === "admin";
+    var esDueno = u.fc === FOTOCHECK_DUENO;
+    var soyYo = u.nombre === quienSoy();
     var abierta = !!usuVistas[u.fc];
     return "<tr>" +
       "<td><b>" + esc(u.nombre || "—") + "</b>" +
-        (esAdmin ? ' <span class="marca-est est-info">administra</span>' : "") + "</td>" +
+        (esDueno || u.puesto === "admin" ? ' <span class="marca-est est-info">administra</span>' : "") + "</td>" +
       "<td>" +
-        (u.fc === FOTOCHECK_DUENO
-          ? esc(NOMBRE_PUESTO[u.puesto] || u.puesto) +
-            "<br><small>y administrador de la app</small>"
+        (esDueno
+          ? esc(NOMBRE_PUESTO[u.puesto] || u.puesto) + "<br><small>y administrador de la app</small>"
           : '<select data-puesto-de="' + esc(u.fc) + '" style="min-width:180px">' +
             PUESTOS.map(function(p){
               return '<option value="' + p.k + '"' + (u.puesto === p.k ? " selected" : "") +
                 ">" + esc(p.t) + "</option>";
             }).join("") + "</select>") +
       "</td>" +
+      '<td><select data-proy-de="' + esc(u.fc) + '" style="min-width:200px">' +
+        opcionesProyecto(u.proyecto) + "</select></td>" +
       '<td class="n">' + esc(u.fc || "—") + "</td>" +
       "<td>" + esc(u.cel || "—") + "</td>" +
-      "<td>" +
+      "<td style='white-space:nowrap'>" +
         (abierta
           ? "<code>" + esc(u.clave || "—") + "</code> "
           : '<span style="letter-spacing:.22em;color:var(--tinta3)">••••••</span> ') +
         '<button class="bt chico" type="button" data-ver-clave="' + esc(u.fc) + '">' +
-        (abierta ? "Ocultar" : "Ver") + "</button></td>" +
+        (abierta ? "Ocultar" : "Ver") + "</button> " +
+        '<button class="bt chico" type="button" data-clave-de="' + esc(u.fc) + '">Cambiar</button></td>' +
       "<td>" + (u.creado ? fecha(u.creado) : "—") + "</td>" +
-    "</tr>";
+      '<td style="width:1%">' +
+        (esDueno || soyYo
+          ? '<small style="color:var(--tinta3)">' + (soyYo ? "es usted" : "dueño") + "</small>"
+          : '<button class="bt chico" type="button" data-quita-usu="' + esc(u.fc) + '">Quitar</button>') +
+      "</td></tr>";
+  }
+
+  function enganchar(){
+    $("us-orden").addEventListener("change", function(){ usuOrden = this.value; pintar(); });
+
+    var i, bs;
+
+    bs = $("zona").querySelectorAll("[data-ver-clave]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("click", function(){
+      usuVistas[this.dataset.verClave] = !usuVistas[this.dataset.verClave];
+      pintar();
+    });
+
+    /* Cambiar el puesto cambia lo que esa persona ve al entrar. */
+    bs = $("zona").querySelectorAll("[data-puesto-de]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("change", function(){
+      var u = buscarUsu(this.dataset.puestoDe);
+      if(!u) return;
+      u.puesto = this.value;
+      guardar();
+      aviso(u.nombre.split(" ")[0] + " ahora entra como " + (NOMBRE_PUESTO[u.value] || this.value) + ".");
+      pintar();
+    });
+
+    bs = $("zona").querySelectorAll("[data-proy-de]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("change", function(){
+      var u = buscarUsu(this.dataset.proyDe);
+      if(!u) return;
+      u.proyecto = this.value;
+      guardar();
+      aviso(u.nombre.split(" ")[0] + " · " + nombreProyecto(this.value) + ".");
+      pintar();
+    });
+
+    /* Una contraseña nueva, cuando alguien la olvidó. */
+    bs = $("zona").querySelectorAll("[data-clave-de]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("click", function(){
+      var u = buscarUsu(this.dataset.claveDe);
+      if(!u) return;
+      var nueva = prompt("Contraseña nueva para " + u.nombre + ":", "");
+      if(nueva === null) return;
+      nueva = String(nueva).trim();
+      if(!nueva) return aviso("No se cambió: la contraseña no puede quedar vacía.");
+      u.clave = nueva;
+      guardar();
+      usuVistas[u.fc] = true;
+      aviso("Contraseña de " + u.nombre.split(" ")[0] + " cambiada. Dígasela.");
+      pintar();
+    });
+
+    /* Quitar a alguien que ya no está en la obra. Ni el dueño ni uno mismo:
+       quedarse sin administrador deja la app sin quien la arregle. */
+    bs = $("zona").querySelectorAll("[data-quita-usu]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("click", function(){
+      var u = buscarUsu(this.dataset.quitaUsu);
+      if(!u) return;
+      if(!confirm("¿Quitar a " + u.nombre + " (" + u.fc + ")?\n\nNo podrá volver a entrar con ese fotocheck. Lo que ya registró se queda.")) return;
+      db.usuarios = db.usuarios.filter(function(x){ return x.fc !== u.fc; });
+      guardar();
+      aviso(u.nombre.split(" ")[0] + " fue quitado.");
+      pintar();
+    });
+
+    /* ---- proyectos ---- */
+    $("pr-agregar").addEventListener("click", function(){
+      var nom = ($("pr-nuevo").value || "").trim();
+      if(nom.length < 3) return aviso("Escriba el nombre del proyecto.");
+      if(proyectosVivos().some(function(p){ return clave(p.nombre) === clave(nom); }))
+        return aviso("Ya hay un proyecto con ese nombre.");
+      db.proyectos = db.proyectos || [];
+      db.proyectos.push({id:"p-" + uid(), nombre:nom, creado:new Date().toISOString()});
+      guardar();
+      aviso("Proyecto agregado: " + nom + ".");
+      pintar();
+    });
+
+    bs = $("zona").querySelectorAll("[data-proy]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("change", function(){
+      var p = (db.proyectos || []).filter(function(x){ return x.id === this.dataset.proy; }.bind(this))[0];
+      if(!p) return;
+      var nom = (this.value || "").trim();
+      if(!nom) return pintar();
+      p.nombre = nom;
+      guardar();
+      aviso("Proyecto renombrado.");
+      pintar();
+    });
+
+    bs = $("zona").querySelectorAll("[data-quita-proy]");
+    for(i = 0; i < bs.length; i++) bs[i].addEventListener("click", function(){
+      var id = this.dataset.quitaProy;
+      var p = (db.proyectos || []).filter(function(x){ return x.id === id; })[0];
+      if(!p) return;
+      var cuantos = (db.usuarios || []).filter(function(u){ return u.proyecto === id; }).length;
+      if(!confirm("¿Quitar el proyecto " + p.nombre + "?" +
+                  (cuantos ? "\n\n" + cuantos + " persona(s) pasan a Todos los proyectos." : ""))) return;
+      db.proyectos = db.proyectos.filter(function(x){ return x.id !== id; });
+      (db.usuarios || []).forEach(function(u){ if(u.proyecto === id) u.proyecto = "todos"; });
+      guardar();
+      aviso("Proyecto quitado.");
+      pintar();
+    });
+  }
+
+  function buscarUsu(fc){
+    return (db.usuarios || []).filter(function(x){ return x.fc === fc; })[0];
   }
 
   pintar();
 };
+
 
 /* =====================================================================
    FOTOS Y CAPTURAS
