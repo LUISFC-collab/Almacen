@@ -17,7 +17,13 @@ var num = function(v){ var n = parseFloat(v); return isNaN(n) ? 0 : n; };
 var hoy = function(){ var d = new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 var fecha = function(iso){ if(!iso) return "—";
-  var d = new Date(iso); if(isNaN(d)) return String(iso).slice(0,10);
+  /* Una fecha suelta —2026-09-02, la del campo del formulario— la lee el
+     navegador como medianoche en Londres, y en Perú eso es el día anterior.
+     Por eso el requisito de hoy salía fechado ayer. Cuando viene sola se
+     parte a mano; cuando trae hora es un instante real y no hay ambigüedad. */
+  var s = String(iso), m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m) return m[3] + "/" + m[2] + "/" + m[1].slice(2);
+  var d = new Date(iso); if(isNaN(d)) return s.slice(0,10);
   return String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+String(d.getFullYear()).slice(2); };
 var uid = function(){ return "x" + (contador++) + "-" + Math.floor(performance.now()*1000); };
 var contador = 1;
@@ -1024,7 +1030,7 @@ var VERSION_APP = (function(){
     var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
     if(v) return decodeURIComponent(v);
   }catch(e){}
-  return "2026-09-02-b";
+  return "2026-09-02-c";
 })();
 
 function textoVersion(){
@@ -1469,6 +1475,49 @@ function bajarBlob(nombre, blob){
   setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
 }
 
+/* =====================================================================
+   TODO LO REGISTRADO, EN UN SOLO EXCEL
+
+   El botón de cada fila baja su requisito con el formato de la plantilla
+   de la obra, que es el que se firma. Este otro baja los materiales de
+   TODOS los requisitos de la pantalla, un renglón por material, con la
+   columna del requisito al que pertenece.
+
+   Sirve para otra cosa: pasar la lista completa a logística o cruzarla
+   contra el consolidado sin tener que abrir doce archivos y copiarlos
+   a mano. Por eso lleva encabezado plano y no la plantilla firmable.
+   ===================================================================== */
+function excelTodosLosRequisitos(){
+  var filas = [
+    ["MATERIALES DE TODOS LOS REQUISITOS REGISTRADOS"],
+    [],
+    ["Obra:", db.obra, "", "", "", "Descargado:", fecha(new Date().toISOString())],
+    ["Requisitos:", db.requerimientos.length, "", "", "", "Materiales:", totalMaterialesReq()],
+    [],
+    ["N°","REQUISITO","FECHA","DESCRIPCIÓN","UND","CANTIDAD","SOLICITANTE","LUGAR / FRENTE","ÁREA","OBSERVACIONES"]
+  ];
+
+  /* del más antiguo al más nuevo: así se lee como un historial y no al revés */
+  var n = 0;
+  db.requerimientos.slice().reverse().forEach(function(r){
+    r.items.forEach(function(i){
+      n++;
+      filas.push([n, r.codigo, fecha(r.fecha), i.desc, i.und || "und", num(i.cant),
+                  i.sol || r.solicitante || "", i.frente || "", r.area || db.area || "",
+                  i.obs || ""]);
+    });
+  });
+  if(!n) filas.push(["", "Todavía no hay materiales registrados."]);
+
+  return crearXLSX(filas, [1, 6], [6, 14, 12, 46, 8, 12, 20, 20, 24, 30]);
+}
+
+function totalMaterialesReq(){
+  var n = 0;
+  db.requerimientos.forEach(function(r){ n += r.items.length; });
+  return n;
+}
+
 /* El requisito, con la cabecera y las filas en blanco de la plantilla */
 function excelRequisito(r){
   var filas = [
@@ -1801,7 +1850,15 @@ function pintarListaReq(){
   if(!db.requerimientos.length){
     $("rq-lista").innerHTML = '<div class="vacio">Todavía no hay requisitos.</div>'; return;
   }
-  $("rq-lista").innerHTML = '<div class="tabla-caja"><table><thead><tr>' +
+  $("rq-lista").innerHTML =
+    '<div class="botones" style="margin:0 0 12px">' +
+      '<button class="bt pri" type="button" id="rq-xls-todo">Excel de todo lo registrado</button>' +
+      '<span class="der" style="font-size:12.5px;color:var(--tinta2)">' +
+        db.requerimientos.length + (db.requerimientos.length === 1 ? " requisito · " : " requisitos · ") +
+        totalMaterialesReq() + (totalMaterialesReq() === 1 ? " material" : " materiales") +
+      "</span>" +
+    "</div>" +
+    '<div class="tabla-caja"><table><thead><tr>' +
     "<th>Código</th><th>Fecha</th><th>Solicitante</th><th>Frente</th><th class='n'>Materiales</th><th></th>" +
     "</tr></thead><tbody>" +
     db.requerimientos.map(function(r){
@@ -1811,6 +1868,12 @@ function pintarListaReq(){
         '<td style="width:1%"><button class="bt chico" type="button" data-xls="' + r.id +
         '">Excel</button></td></tr>';
     }).join("") + "</tbody></table></div>";
+
+  $("rq-xls-todo").addEventListener("click", function(){
+    bajarBlob("REQUISITOS_TODOS_" + hoy() + ".xlsx", excelTodosLosRequisitos());
+    aviso("Excel con " + totalMaterialesReq() + " materiales de " +
+          db.requerimientos.length + " requisitos.");
+  });
 
   var xs = $("rq-lista").querySelectorAll("[data-xls]"), i;
   for(i=0;i<xs.length;i++) xs[i].addEventListener("click", function(){
