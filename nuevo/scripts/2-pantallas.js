@@ -359,6 +359,7 @@ function guardarEdicion(){
 
   var res = aplicarAlConsolidado(r);
   guardar();
+  subirReq(r);
   var id = r.codigo;
   cerrarEditor();
   pintarMenu();
@@ -450,7 +451,7 @@ VISTA.revisar = function(){
   for(i=0;i<bs.length;i++) bs[i].addEventListener("click", function(){
     var r = db.requerimientos.filter(function(x){ return x.id === this.dataset.ok; }.bind(this))[0];
     r.estado = siguienteEstado(r);
-    guardar(); VISTA.revisar(); pintarMenu();
+    guardar(); subirReq(r); VISTA.revisar(); pintarMenu();
     aviso(r.codigo + " · " + FLUJO[r.estado].t.toLowerCase() + ".");
   });
 
@@ -481,7 +482,8 @@ VISTA.comprar = function(){
   for(i=0;i<bs.length;i++) bs[i].addEventListener("click", function(){
     var r = db.requerimientos.filter(function(x){ return x.id === this.dataset.comp; }.bind(this))[0];
     r.estado = "comprado";
-    guardar(); VISTA.comprar(); aviso(r.codigo + " comprado. Ya se puede despachar.");
+    guardar(); subirReq(r); VISTA.comprar();
+    aviso(r.codigo + " comprado. Ya se puede despachar.");
   });
 };
 

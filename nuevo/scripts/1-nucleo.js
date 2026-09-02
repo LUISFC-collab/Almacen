@@ -1830,6 +1830,34 @@ function pintarAvisoBorrador(estado){
   }
 }
 
+/* =====================================================================
+   SUBIR EL REQUERIMIENTO A LA BASE
+
+   Un requerimiento no cambia una sola vez. Cambia cuando se registra,
+   cuando Obra o el administrador lo corrigen, cuando pasa a logística,
+   cuando se marca comprado y cuando se quita.
+
+   Hasta ahora solo viajaban dos de esos momentos: el alta y la baja. Los
+   demás se guardaban únicamente en el equipo donde se hicieron, y por eso
+   una laptop mostraba el pedido corregido y la otra seguía con la versión
+   vieja, sin que nada avisara.
+
+   Ahora todos pasan por aquí. Si no hay señal queda anotado y sube solo
+   cuando vuelve: lo que no puede pasar es que un cambio se pierda porque
+   el cerro se quedó sin cobertura.
+   ===================================================================== */
+function subirReq(r){
+  if(!r) return;
+  if(typeof nubeHay === "function" && nubeHay()){
+    nubeGuardarRequerimiento(r).catch(function(e){
+      if(typeof nubeEncolar === "function") nubeEncolar("requerimiento", r);
+      aviso("Guardado aquí. La base no lo tomó: " + e.message);
+    });
+  } else if(typeof nubeEncolar === "function"){
+    nubeEncolar("requerimiento", r);
+  }
+}
+
 /* ---------- REQUISITO ---------- */
 var itemsReq = [];
 VISTA.requisito = function(){
@@ -2039,14 +2067,7 @@ function guardarReq(){
   /* y a la base, si esta persona entró con su cuenta. Si falla —o si no
      hay señal— queda anotado y se reintenta solo: lo que no puede pasar
      es que el pedido se pierda porque el servidor no contestó. */
-  if(typeof nubeHay === "function" && nubeHay()){
-    nubeGuardarRequerimiento(reg).catch(function(e){
-      nubeEncolar("requerimiento", reg);
-      aviso("Guardado aquí. La base no lo tomó: " + e.message);
-    });
-  } else if(typeof nubeEncolar === "function"){
-    nubeEncolar("requerimiento", reg);
-  }
+  subirReq(reg);
   try{
     bajarBlob("REQUERIMIENTO_" + codigo + ".xlsx", excelRequisito(reg));
   }catch(e){ /* si el navegador no deja bajar, el pedido igual quedó guardado */ }
