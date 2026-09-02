@@ -8,9 +8,15 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Almacén CPQ">
 
-<link rel="stylesheet" href="estilos/1-base.css">
-<link rel="stylesheet" href="estilos/2-panel-izquierdo.css">
-<link rel="stylesheet" href="estilos/3-componentes.css">
+<!-- El ?v= de cada archivo no es adorno: sin él el navegador se queda con
+     la copia que bajó la primera vez y sigue mostrando la app de la semana
+     pasada aunque el servidor ya tenga la nueva. Al cambiar el número,
+     la dirección cambia y el navegador está obligado a bajarla otra vez.
+     La versión pegada a cada archivo es la misma que se ve arriba del
+     botón de salir: si no coinciden, ese equipo está atrasado. -->
+<link rel="stylesheet" href="estilos/1-base.css?v=2026-09-02-b">
+<link rel="stylesheet" href="estilos/2-panel-izquierdo.css?v=2026-09-02-b">
+<link rel="stylesheet" href="estilos/3-componentes.css?v=2026-09-02-b">
 </head>
 <body>
 
@@ -76,7 +82,7 @@
 
 <div id="aviso-flotante" role="status" aria-live="polite"></div>
 
-<script src="scripts/1-nucleo.js"></script>
-<script src="scripts/2-pantallas.js"></script>
+<script src="scripts/1-nucleo.js?v=2026-09-02-b"></script>
+<script src="scripts/2-pantallas.js?v=2026-09-02-b"></script>
 </body>
 </html>

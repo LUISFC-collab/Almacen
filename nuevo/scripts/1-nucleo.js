@@ -1015,7 +1015,17 @@ var VISTA = {};
    Se cambia AQUÍ, a mano, cada vez que se publica. Es la única línea
    que hay que tocar.
    ===================================================================== */
-var VERSION_APP = "2026-09-02-a";
+var VERSION_APP = (function(){
+  /* Se toma del ?v= con el que index.html pidió este archivo, para que la
+     versión se cambie en UN solo sitio y no haya forma de que lo que se
+     muestra y lo que se descarga digan cosas distintas. */
+  try{
+    var s = document.currentScript || document.querySelector('script[src*="1-nucleo"]');
+    var v = s && (s.getAttribute("src").split("?v=")[1] || "").split("&")[0];
+    if(v) return decodeURIComponent(v);
+  }catch(e){}
+  return "2026-09-02-b";
+})();
 
 function textoVersion(){
   var p = String(VERSION_APP).split("-");
