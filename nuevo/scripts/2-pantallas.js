@@ -623,7 +623,10 @@ function crearPerfil(){
       puesto = $("al-puesto").value;
   var err = $("al-err");
   err.textContent = "";
-  if(nombre.length < 5) return err.textContent = "Escriba su nombre completo.";
+  /* Tres letras, no cinco: Ana, Eva, Luis y Jose son nombres de verdad y
+     el minimo de cinco los dejaba fuera. Es el mismo minimo que pide la
+     base, para que no acepte aqui lo que alla rechaza. */
+  if(nombre.length < 3) return err.textContent = "Escriba su nombre.";
   if(cel.replace(/\D/g,"").length < 6) return err.textContent = "Escriba su número de celular.";
   if(fc.length < 3) return err.textContent = "Escriba el número de su fotocheck.";
   if(!clave.length) return err.textContent = "Escriba una contraseña.";
@@ -965,6 +968,21 @@ async function actualizarEsteEquipo(){
 var conectando = false;
 var ultimoFalloNube = "";
 
+/* Lo que devuelve la base viene en su idioma. Traducirlo no es adorno:
+   el que lo lee esta en el cerro y necesita saber que tiene que cambiar,
+   no el nombre de una restriccion. El texto original queda en el titulo
+   por si hace falta mirarlo. */
+function motivoLegible(m){
+  m = String(m || "");
+  if(m.indexOf("perfiles_nombre_ok") >= 0) return "el nombre es muy corto (mínimo 3 letras).";
+  if(m.indexOf("perfiles_fotocheck_ok") >= 0) return "el fotocheck debe tener entre 3 y 12 dígitos.";
+  if(/weak_password|at least 6/i.test(m)) return "la contraseña es muy corta.";
+  if(/already registered|duplicate/i.test(m)) return "ese fotocheck ya tiene cuenta con otra contraseña.";
+  if(/aprobad|visto bueno/i.test(m)) return "su cuenta espera el visto bueno del administrador.";
+  if(/Failed to fetch|NetworkError|network/i.test(m)) return "no hay señal para llegar a la base.";
+  return m;
+}
+
 function usuarioDeEsteEquipo(){
   var quien = null;
   try{ quien = localStorage.getItem("almacen_simple_persona"); }catch(e){}
@@ -1070,7 +1088,8 @@ function pintarEstadoNube(){
       if(bt && bt.nextSibling) caja.insertBefore(m, bt.nextSibling);
       else caja.insertBefore(m, caja.firstChild);
     }
-    m.textContent = "La base dijo: " + ultimoFalloNube;
+    m.textContent = "No conectó porque " + motivoLegible(ultimoFalloNube);
+    m.title = ultimoFalloNube;
   } else if(m) m.remove();
 }
 
@@ -1168,11 +1187,75 @@ function salir(){
   window.scrollTo(0,0);
 }
 
+/* =====================================================================
+   QUE TODOS LOS EQUIPOS TERMINEN EN LA MISMA VERSIÓN
+
+   El servidor deja la página guardada un rato en cada navegador. Por eso
+   un equipo muestra la versión nueva y otro sigue con la vieja hasta que
+   a alguien se le ocurre vaciar el caché. Mientras tanto dos personas
+   miran pantallas distintas y creen que la app está fallando, cuando lo
+   que pasa es que no están corriendo el mismo programa.
+
+   La app le pregunta al servidor qué versión hay publicada, sin usar el
+   caché, y si no es la suya se recarga sola una vez. Es lo que uno haría
+   a mano, hecho solo y sin que nadie tenga que enterarse.
+   ===================================================================== */
+var MARCA_RECARGA = "almacen_recargado_a";
+
+function versionPublicada(){
+  return fetch("index.html?ver=" + Date.now(), {cache: "no-store"})
+    .then(function(r){ return r.ok ? r.text() : ""; })
+    .then(function(html){
+      var marca = "1-nucleo.js?v=";
+      var i = html.indexOf(marca);
+      if(i < 0) return "";
+      var resto = html.slice(i + marca.length);
+      var fin = resto.indexOf('"');
+      return fin < 0 ? "" : resto.slice(0, fin);
+    })
+    .catch(function(){ return ""; });
+}
+
+function vigilarVersion(){
+  versionPublicada().then(function(v){
+    if(!v || v === VERSION_APP) return;
+
+    /* Si ya se recargó por esta misma versión y sigue llegando la vieja,
+       no se insiste: un equipo dando vueltas en recargas es peor que un
+       equipo atrasado. Se avisa y que lo aprieten a mano. */
+    var ya = "";
+    try{ ya = sessionStorage.getItem(MARCA_RECARGA) || ""; }catch(e){}
+    if(ya === v){
+      var p = $("salir") && $("salir").querySelector(".version");
+      if(p){
+        p.textContent = textoVersion() + " · hay una más nueva";
+        p.title = "El servidor tiene la " + v + ". Use Actualizar este equipo.";
+      }
+      return;
+    }
+
+    try{ sessionStorage.setItem(MARCA_RECARGA, v); }catch(e){}
+    aviso("Hay una versión más nueva. Actualizando este equipo…");
+    setTimeout(function(){
+      try{
+        var u = new URL(location.href);
+        u.searchParams.set("v", v);
+        location.replace(u.toString());
+      }catch(e){ location.reload(); }
+    }, 900);
+  });
+}
+
 /* La versión va pegada arriba del botón de salir: es donde la mira el que
    llama por teléfono para decir «no me aparece lo nuevo». */
 (function ponerActualizar(){
   if(typeof ponerBotonActualizar === "function") ponerBotonActualizar();
 })();
+
+/* Al abrir, y cada diez minutos para el equipo que se queda encendido
+   todo el día en la oficina. */
+vigilarVersion();
+setInterval(vigilarVersion, 600000);
 
 (function ponerVersion(){
   var caja = $("salir");

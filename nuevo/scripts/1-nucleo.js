@@ -1721,6 +1721,10 @@ function cargarExcel(archivo){
    ===================================================================== */
 var BORRADOR_LOCAL = "almacen_borrador_req";
 var borradorEspera = null;
+/* Momento en que se registró el requerimiento y el borrador dejó de
+   servir. Sin esto, la respuesta que venía en camino desde la base
+   volvía a poner en pantalla lo que se acababa de registrar. */
+var borradorSoltadoEn = 0;
 var borradorVersion = 0;
 
 function borradorAhora(){
@@ -1758,8 +1762,15 @@ function anotarBorrador(){
 
 function soltarBorrador(){
   clearTimeout(borradorEspera);
+  borradorSoltadoEn = Date.now();
   try{ localStorage.removeItem(BORRADOR_LOCAL); }catch(e){}
-  if(typeof nubeSoltarBorrador === "function") nubeSoltarBorrador();
+  if(typeof nubeSoltarBorrador === "function"){
+    /* y otra vez cuando la base confirme la baja: entre una cosa y la
+       otra puede haber llegado una respuesta con el borrador viejo */
+    nubeSoltarBorrador().then(function(){
+      try{ localStorage.removeItem(BORRADOR_LOCAL); }catch(e){}
+    });
+  }
 }
 
 function borradorGuardado(){
@@ -1774,6 +1785,12 @@ function borradorGuardado(){
    con algo más viejo. */
 function aplicarBorrador(b, deDonde){
   if(borradorVacio(b)) return false;
+
+  /* Lo que se escribió antes de registrar ya está registrado. Si llega
+     tarde una copia de eso, se descarta: revivirlo haría que la persona
+     lo registrara dos veces sin darse cuenta. */
+  if(borradorSoltadoEn && b.tocado &&
+     new Date(b.tocado).getTime() <= borradorSoltadoEn) return false;
 
   /* Si es lo mismo que ya está en pantalla no se toca nada. El aviso de
      tiempo real llega también por lo que uno mismo acaba de guardar, y
